@@ -45,6 +45,13 @@ export interface PropertyCountRow {
     reviewCount: number
 }
 
+function toIsoString(value: Date | string | null | undefined): string | null {
+    if (value === null || value === undefined) return null
+    if (value instanceof Date) return value.toISOString()
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
+
 export function mapOverviewResponse(input: {
     scope: ResolvedAnalyticsScope
     properties: PropertyRow[]
@@ -140,8 +147,8 @@ export function mapOverviewResponse(input: {
                   }
                 : null,
         freshness: {
-            latestReviewAt: input.current.latestReviewAt?.toISOString() ?? null,
-            latestScrapedAt: input.current.latestScrapedAt?.toISOString() ?? null,
+            latestReviewAt: toIsoString(input.current.latestReviewAt),
+            latestScrapedAt: toIsoString(input.current.latestScrapedAt),
             sources: input.current.sources,
         },
         classificationCoverage: createMetric({
@@ -214,7 +221,7 @@ export function mapIssueSignals(input: {
             momentumPercentagePoints: metric.delta,
             ratingGap: calculateRatingGap(row.averageRating, input.scopeAverageRating),
             sampleSize: currentSampleSize,
-            latestReviewAt: row.latestReviewAt?.toISOString() ?? null,
+            latestReviewAt: toIsoString(row.latestReviewAt),
             status: metric.status,
         }
     })

@@ -31,7 +31,9 @@ async function getPeriodSummary(scope: ResolvedAnalyticsScope, period: Analytics
             lowScoreCount: sql<number>`count(*) filter (where ${reviews.ratingNumeric} <= 5)`,
             latestReviewAt: sql<Date | null>`max(${reviews.reviewDate})`,
             latestScrapedAt: sql<Date | null>`max(${reviews.scrapedAt})`,
-            sources: sql<string[]>`coalesce(array_agg(distinct ${reviews.source}), '{}')`,
+            sources: sql<
+                string[]
+            >`coalesce(array_agg(distinct ${reviews.source}::text) filter (where ${reviews.source} is not null), '{}'::text[])`,
         })
         .from(reviews)
         .innerJoin(properties, eq(properties.id, reviews.propertyId))
@@ -263,36 +265,35 @@ export async function getDashboardSeries(scope: ResolvedAnalyticsScope) {
     return cachedQuery(scopeCacheKey('dashboard:series', scope), DASHBOARD_CACHE_TTL, async () => {
         const calendarDays = Math.round((scope.to.getTime() - scope.from.getTime()) / 86_400_000)
         const granularity = getSeriesGranularity(calendarDays)
-        const bucket =
+        const bucketExpression =
             granularity === 'day'
-                ? sql<string>`to_char(date_trunc('day', ${reviews.reviewDate} at time zone 'Australia/Sydney'), 'YYYY-MM-DD')`
-                : sql<string>`to_char(date_trunc('week', ${reviews.reviewDate} at time zone 'Australia/Sydney'), 'YYYY-MM-DD')`
+                ? sql`to_char(date_trunc('day', timezone('Australia/Sydney', ${reviews.reviewDate})), 'YYYY-MM-DD')`
+                : sql`to_char(date_trunc('week', timezone('Australia/Sydney', ${reviews.reviewDate})), 'YYYY-MM-DD')`
+        const bandExpression = sql<string>`case when ${reviews.ratingNumeric} <= 5 then '0-5' when ${reviews.ratingNumeric} < 8 then '5.1-7.9' else '8-10' end`
         const [seriesRows, ratingBands] = await Promise.all([
             db
                 .select({
-                    bucket,
+                    bucket: sql<string>`${bucketExpression}`,
                     averageRating: sql<number | null>`avg(${reviews.ratingNumeric})`,
                     reviewCount: count(),
                 })
                 .from(reviews)
                 .innerJoin(properties, eq(properties.id, reviews.propertyId))
                 .where(scopeConditions(scope, scope))
-                .groupBy(bucket)
-                .orderBy(asc(bucket)),
+                .groupBy(bucketExpression)
+                .orderBy(asc(bucketExpression)),
             db
                 .select({
-                    band: sql<string>`case when ${reviews.ratingNumeric} <= 5 then '0-5' when ${reviews.ratingNumeric} < 8 then '5.1-7.9' else '8-10' end`,
+                    band: bandExpression,
                     reviewCount: count(),
                 })
                 .from(reviews)
                 .innerJoin(properties, eq(properties.id, reviews.propertyId))
                 .where(scopeConditions(scope, scope))
-                .groupBy(
-                    sql`case when ${reviews.ratingNumeric} <= 5 then '0-5' when ${reviews.ratingNumeric} < 8 then '5.1-7.9' else '8-10' end`,
-                )
+                .groupBy(bandExpression)
                 .orderBy(
                     asc(
-                        sql`case when ${reviews.ratingNumeric} <= 5 then 1 when ${reviews.ratingNumeric} < 8 then 2 else 3 end`,
+                        sql`min(case when ${reviews.ratingNumeric} <= 5 then 1 when ${reviews.ratingNumeric} < 8 then 2 else 3 end)`,
                     ),
                 ),
         ])

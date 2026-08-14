@@ -21,6 +21,12 @@ export function createDashboardRoute<T>(
             return NextResponse.json({ error: 'Unknown property.' }, { status: 400 })
         }
 
-        return NextResponse.json(await load(resolveAnalyticsScope(parsed.value)))
+        try {
+            return NextResponse.json(await load(resolveAnalyticsScope(parsed.value)))
+        } catch (error) {
+            console.error('[dashboard] route loader failed:', error)
+            const message = error instanceof Error ? error.message : 'Failed to load dashboard analytics.'
+            return NextResponse.json({ error: message }, { status: 500 })
+        }
     }
 }
