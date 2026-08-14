@@ -392,10 +392,18 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
     const rows =
         topicConditions.length > 0
             ? await db
-                  .selectDistinct({
-                      review: reviews,
-                      property: properties,
-                  })
+                  .selectDistinct(
+                      representativeRank
+                          ? {
+                                review: reviews,
+                                property: properties,
+                                representativeRank,
+                            }
+                          : {
+                                review: reviews,
+                                property: properties,
+                            },
+                  )
                   .from(reviews)
                   .innerJoin(properties, eq(reviews.propertyId, properties.id))
                   .innerJoin(reviewTopics, eq(reviewTopics.reviewId, reviews.id))
@@ -414,7 +422,10 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
                   .limit(limit + 1)
 
     const hasMore = rows.length > limit
-    const pageRows = hasMore ? rows.slice(0, limit) : rows
+    const pageRows = (hasMore ? rows.slice(0, limit) : rows).map((row) => ({
+        review: row.review,
+        property: row.property,
+    }))
     const items = await attachTopics(pageRows)
     const last = items.at(-1)
 
