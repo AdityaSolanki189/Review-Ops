@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils/utils'
 
 const inter = Inter({ subsets: ['latin'] })
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
     title: {
         default: config.app.name,

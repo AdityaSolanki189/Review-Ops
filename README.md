@@ -79,6 +79,21 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Production (Vercel + Neon)
+
+Local development uses Docker Postgres on port **5433**. Production uses [Neon](https://neon.tech) serverless Postgres.
+
+1. In the Vercel project settings, set **`DATABASE_URL`** to your Neon **pooled** connection string (`…-pooler.…neon.tech`, with `sslmode=require`). Do not use `localhost:5433`.
+2. Set **`NEXT_PUBLIC_APP_URL`** to your production site URL.
+3. Apply schema and seed properties against Neon using the **direct** (non-pooler) URL:
+
+```bash
+DATABASE_URL_UNPOOLED="postgresql://…@ep-xxx.region.aws.neon.tech/neondb?sslmode=require" pnpm db:migrate
+DATABASE_URL_UNPOOLED="postgresql://…@ep-xxx.region.aws.neon.tech/neondb?sslmode=require" pnpm db:seed
+```
+
+Reviews stay empty until you run `pnpm scrape` with Neon as `DATABASE_URL`. The scraper remains a local CLI job, not a Vercel function.
+
 ## Properties
 
 | Property | Slug |
