@@ -229,6 +229,7 @@ function DashboardContent({
                                 <TableHead>Property</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead>Finished</TableHead>
+                                <TableHead>Latest review</TableHead>
                                 <TableHead>Inserted</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -243,6 +244,13 @@ function DashboardContent({
                                         {run?.finishedAt
                                             ? format(run.finishedAt, 'dd MMM yyyy, HH:mm')
                                             : 'In progress / never'}
+                                    </TableCell>
+                                    <TableCell>
+                                        {run?.newestReviewAt
+                                            ? format(run.newestReviewAt, 'dd MMM yyyy')
+                                            : property.latestReviewAt
+                                              ? format(property.latestReviewAt, 'dd MMM yyyy')
+                                              : '—'}
                                     </TableCell>
                                     <TableCell>{run?.reviewsInserted ?? '0'}</TableCell>
                                 </TableRow>

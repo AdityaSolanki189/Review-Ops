@@ -1,6 +1,7 @@
 export const selectors = {
     cookieAccept: '[data-testid="accept-btn"], button:has-text("Accept"), #onetrust-accept-btn-handler',
-    reviewsTab: 'a:has-text("Guest reviews"), button:has-text("Guest reviews"), [data-testid="reviews-tab"]',
+    reviewsTab:
+        'a:has-text("Guest reviews"), button:has-text("Guest reviews"), [data-testid="reviews-tab"], a:has-text("Read all reviews"), button:has-text("Read all reviews"), [data-testid="review-score-widget"], a[href*="#customer_reviews"]',
     reviewCard: '[data-testid="review-card"], div[data-review-id], .review_list_new_item_block',
     reviewRating: '[data-testid="review-score"], .bui-review-score__badge, .review-score-badge',
     reviewTitle: '[data-testid="review-title"], .c-review-block__title',

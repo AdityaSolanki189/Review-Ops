@@ -6,8 +6,17 @@ import { properties } from '@/db/schema'
 import { seedProperties } from '@/lib/seed'
 import { scrapePropertyReviews } from './booking'
 import { createScrapeRun, finishScrapeRun, insertReview, reviewExists } from './deduplicate'
+import { maxReviewDate } from './graphql'
 import { SCRAPE_CONFIG } from './selectors'
 import { sleep, withRetry } from './retry'
+import { getPropertyWatermark, updatePropertyWatermark } from './watermark'
+
+class GraphqlCaptureError extends Error {
+    constructor(message: string) {
+        super(message)
+        this.name = 'GraphqlCaptureError'
+    }
+}
 
 async function scrapeSingleProperty(propertyId: string) {
     const [property] = await db.select().from(properties).where(eq(properties.id, propertyId)).limit(1)
@@ -15,6 +24,7 @@ async function scrapeSingleProperty(propertyId: string) {
         throw new Error(`Property not found: ${propertyId}`)
     }
 
+    const watermark = await getPropertyWatermark(property)
     let attemptCount = 0
     let runId: string | undefined
 
@@ -32,24 +42,18 @@ async function scrapeSingleProperty(propertyId: string) {
                     let reviewsFound = 0
                     let reviewsInserted = 0
                     let consecutiveKnown = 0
-                    let blocked = false
+                    let newestReviewDate: Date | null = null
+                    let graphqlCaptured = false
 
-                    const pageResults = await scrapePropertyReviews(browser, property, (_pageNumber, found) => {
-                        reviewsFound += found
-                    })
+                    const scrapeResult = await scrapePropertyReviews(browser, property, watermark, async (event) => {
+                        reviewsFound += event.reviews.length
 
-                    for (const pageResult of pageResults) {
-                        if (pageResult.blocked) {
-                            blocked = true
-                            break
-                        }
-
-                        for (const scraped of pageResult.reviews) {
+                        for (const scraped of event.reviews) {
                             const exists = await reviewExists(property, scraped)
                             if (exists) {
                                 consecutiveKnown += 1
                                 if (consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
-                                    break
+                                    return { stop: true, consecutiveKnown }
                                 }
                                 continue
                             }
@@ -61,12 +65,32 @@ async function scrapeSingleProperty(propertyId: string) {
                             }
                         }
 
-                        if (consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
-                            break
+                        const pageNewest = maxReviewDate(event.reviews.map((review) => review.reviewDate))
+                        if (pageNewest && (!newestReviewDate || pageNewest.getTime() > newestReviewDate.getTime())) {
+                            newestReviewDate = pageNewest
                         }
+
+                        if (
+                            watermark &&
+                            event.reviews.some((review) => review.reviewDate.getTime() <= watermark.getTime())
+                        ) {
+                            return { stop: true, consecutiveKnown }
+                        }
+
+                        if (consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
+                            return { stop: true, consecutiveKnown }
+                        }
+
+                        return { stop: false, consecutiveKnown }
+                    })
+
+                    graphqlCaptured = scrapeResult.graphqlCaptured
+                    reviewsFound = scrapeResult.reviewsFound
+                    if (scrapeResult.newestReviewDate) {
+                        newestReviewDate = scrapeResult.newestReviewDate
                     }
 
-                    if (blocked) {
+                    if (scrapeResult.blocked) {
                         if (runId) {
                             await finishScrapeRun(runId, {
                                 status: 'blocked',
@@ -80,18 +104,28 @@ async function scrapeSingleProperty(propertyId: string) {
                         return { property: property.name, status: 'blocked' as const, reviewsInserted }
                     }
 
-                    const status = reviewsInserted > 0 || reviewsFound === 0 ? 'success' : 'partial'
+                    if (!graphqlCaptured) {
+                        throw new GraphqlCaptureError('No reviewListFrontend payload captured from Booking.com GraphQL')
+                    }
+
                     if (runId) {
                         await finishScrapeRun(runId, {
-                            status,
+                            status: 'success',
                             reviewsFound,
                             reviewsInserted,
                             reviewsUpdated: 0,
                             attemptCount,
+                            newestReviewAt: newestReviewDate,
                         })
                     }
 
-                    return { property: property.name, status, reviewsInserted }
+                    await updatePropertyWatermark(property.id, newestReviewDate ?? watermark)
+
+                    console.log(
+                        `  Parsed ${reviewsFound}/${scrapeResult.reviewsCount} reviews across ${scrapeResult.pagesFetched} page(s); ${reviewsInserted} inserted`,
+                    )
+
+                    return { property: property.name, status: 'success' as const, reviewsInserted }
                 } finally {
                     await browser.close()
                 }

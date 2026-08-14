@@ -116,6 +116,7 @@ export async function finishScrapeRun(
         reviewsUpdated: number
         attemptCount: number
         errorMessage?: string
+        newestReviewAt?: Date | null
     },
 ) {
     await db
@@ -128,6 +129,7 @@ export async function finishScrapeRun(
             reviewsUpdated: String(data.reviewsUpdated),
             attemptCount: String(data.attemptCount),
             errorMessage: data.errorMessage ?? null,
+            newestReviewAt: data.newestReviewAt ?? null,
         })
         .where(eq(scrapeRuns.id, runId))
 

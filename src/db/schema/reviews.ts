@@ -7,6 +7,7 @@ export const properties = pgTable('properties', {
     name: text('name').notNull(),
     bookingUrl: text('booking_url').notNull(),
     bookingPropertyId: text('booking_property_id').notNull(),
+    latestReviewAt: timestamp('latest_review_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
 })
 
@@ -86,6 +87,7 @@ export const scrapeRuns = pgTable('scrape_runs', {
     reviewsUpdated: text('reviews_updated').notNull().default('0'),
     attemptCount: text('attempt_count').notNull().default('1'),
     errorMessage: text('error_message'),
+    newestReviewAt: timestamp('newest_review_at', { withTimezone: true, mode: 'date' }),
     ...timestamps,
 })
 

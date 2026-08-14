@@ -13,7 +13,7 @@
         "spell:fix": "cspell \"src/**/*.{js,jsx,ts,tsx,md,mdx}\" \"*.{js,jsx,ts,tsx,md,mdx}\" --show-suggestions",
         "prepare": "husky",
         "precommit": "lint-staged",
-        "test": "tsx --test src/lib/__tests__/**/*.test.ts",
+        "test": "tsx --test src/lib/__tests__/**/*.test.ts scraper/__tests__/**/*.test.ts",
         "scrape": "tsx scraper/index.ts",
         "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
         "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",

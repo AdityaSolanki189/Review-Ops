@@ -46,6 +46,7 @@ export function SyncView() {
                                         <TableHead>Status</TableHead>
                                         <TableHead>Started</TableHead>
                                         <TableHead>Finished</TableHead>
+                                        <TableHead>Latest review</TableHead>
                                         <TableHead>Found</TableHead>
                                         <TableHead>Inserted</TableHead>
                                         <TableHead>Attempts</TableHead>
@@ -55,7 +56,7 @@ export function SyncView() {
                                 <TableBody>
                                     {query.data.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={8} className="text-muted-foreground">
+                                            <TableCell colSpan={9} className="text-muted-foreground">
                                                 No scrape runs recorded yet.
                                             </TableCell>
                                         </TableRow>
@@ -73,6 +74,13 @@ export function SyncView() {
                                                     {run.finishedAt
                                                         ? format(run.finishedAt, 'dd MMM yyyy, HH:mm')
                                                         : '—'}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {run.newestReviewAt
+                                                        ? format(run.newestReviewAt, 'dd MMM yyyy')
+                                                        : property.latestReviewAt
+                                                          ? format(property.latestReviewAt, 'dd MMM yyyy')
+                                                          : '—'}
                                                 </TableCell>
                                                 <TableCell>{run.reviewsFound}</TableCell>
                                                 <TableCell>{run.reviewsInserted}</TableCell>

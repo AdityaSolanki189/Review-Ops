@@ -10,6 +10,8 @@ const DATE_FIELDS = new Set([
     'scrapedAt',
     'startedAt',
     'finishedAt',
+    'latestReviewAt',
+    'newestReviewAt',
     'createdAt',
     'updatedAt',
 ])
