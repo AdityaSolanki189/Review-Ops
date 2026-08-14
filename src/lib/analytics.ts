@@ -26,6 +26,8 @@ export interface IssueSignal {
     propertySlug: string
     topic: ReviewTopicKey
     negativeMentionRate: number
+    negativeReviewShare: number | null
+    portfolioNegativeShare: number | null
     previousMentionRate: number | null
     momentumPercentagePoints: number | null
     ratingGap: number | null

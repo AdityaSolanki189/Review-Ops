@@ -3,17 +3,25 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
-import { NegativeTopicsChart } from '@/components/dashboard/dashboard-charts'
-import { ReviewCard } from '@/components/dashboard/dashboard-parts'
+import { PeriodRatingTrendChart, RatingBandDistributionChart } from '@/components/dashboard/dashboard-charts'
+import { MetricCard, ReviewCard } from '@/components/dashboard/dashboard-parts'
+import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
 import { QueryState } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatTopicLabel } from '@/lib/classification/topics'
 import type { ReviewTopicKey } from '@/lib/classification/topics'
 import { buildReviewsDrillDownUrl, resolveScopeFromSearchParams, scopeComparisonLabel } from '@/lib/dashboard-scope'
+import { formatMetricDelta, formatMetricValue } from '@/lib/dashboard-status'
 import { ApiError } from '@/lib/queries/api'
-import { usePropertyBySlugQuery, usePropertyTopicMixQuery } from '@/lib/queries/properties.queries'
+import {
+    useDashboardOverviewQuery,
+    useDashboardSeriesQuery,
+    useDashboardTopicImpactQuery,
+} from '@/lib/queries/dashboard.queries'
+import { usePropertiesListQuery, usePropertyBySlugQuery } from '@/lib/queries/properties.queries'
 import { useReviewsQuery, type ReviewListItem } from '@/lib/queries/reviews.queries'
 
 interface PropertyDetailViewProps {
@@ -22,76 +30,96 @@ interface PropertyDetailViewProps {
 
 export function PropertyDetailView({ slug }: PropertyDetailViewProps) {
     const searchParams = useSearchParams()
-    const scope = resolveScopeFromSearchParams(searchParams)
+    const baseScope = resolveScopeFromSearchParams(searchParams)
+    const scope = { ...baseScope, propertySlug: slug }
+    const propertiesQuery = usePropertiesListQuery()
     const propertyQuery = usePropertyBySlugQuery(slug)
-    const topicMixQuery = usePropertyTopicMixQuery(slug)
-    const reviewsQuery = useReviewsQuery({ propertySlug: slug, limit: 10 })
+    const overviewQuery = useDashboardOverviewQuery(scope)
+    const seriesQuery = useDashboardSeriesQuery(scope)
+    const topicImpactQuery = useDashboardTopicImpactQuery(scope)
+    const reviewsQuery = useReviewsQuery({ propertySlug: slug, limit: 10, representative: true })
 
     if (propertyQuery.error instanceof ApiError && propertyQuery.error.status === 404) {
         notFound()
     }
 
-    const isLoading = propertyQuery.isLoading || topicMixQuery.isLoading || reviewsQuery.isLoading
-    const isError = propertyQuery.isError || topicMixQuery.isError || reviewsQuery.isError
-    const error = propertyQuery.error ?? topicMixQuery.error ?? reviewsQuery.error
+    const isLoading =
+        propertyQuery.isLoading ||
+        overviewQuery.isLoading ||
+        seriesQuery.isLoading ||
+        topicImpactQuery.isLoading ||
+        reviewsQuery.isLoading
+    const isError =
+        propertyQuery.isError ||
+        overviewQuery.isError ||
+        seriesQuery.isError ||
+        topicImpactQuery.isError ||
+        reviewsQuery.isError
+    const error =
+        propertyQuery.error ?? overviewQuery.error ?? seriesQuery.error ?? topicImpactQuery.error ?? reviewsQuery.error
 
     const refetchAll = () => {
         void propertyQuery.refetch()
-        void topicMixQuery.refetch()
+        void overviewQuery.refetch()
+        void seriesQuery.refetch()
+        void topicImpactQuery.refetch()
         void reviewsQuery.refetch()
     }
 
     return (
-        <QueryState
-            isLoading={isLoading}
-            isError={isError}
-            error={error}
-            onRetry={refetchAll}
-            skeleton={
-                <div className="space-y-8">
-                    <Skeleton className="h-10 w-64" />
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        <Skeleton className="h-64" />
-                        <Skeleton className="h-64" />
+        <div className="space-y-8">
+            {propertiesQuery.data ? <DashboardScopeBar properties={propertiesQuery.data} /> : null}
+
+            <QueryState
+                isLoading={isLoading}
+                isError={isError}
+                error={error}
+                onRetry={refetchAll}
+                skeleton={
+                    <div className="space-y-8">
+                        <Skeleton className="h-10 w-64" />
+                        <div className="grid gap-6 lg:grid-cols-2">
+                            <Skeleton className="h-64" />
+                            <Skeleton className="h-64" />
+                        </div>
                     </div>
-                </div>
-            }
-        >
-            {propertyQuery.data && topicMixQuery.data && reviewsQuery.data ? (
-                <PropertyDetailContent
-                    property={propertyQuery.data}
-                    topicMix={topicMixQuery.data}
-                    recentReviews={reviewsQuery.data.pages[0]?.items ?? []}
-                    scope={scope}
-                />
-            ) : null}
-        </QueryState>
+                }
+            >
+                {propertyQuery.data &&
+                overviewQuery.data &&
+                seriesQuery.data &&
+                topicImpactQuery.data &&
+                reviewsQuery.data ? (
+                    <PropertyDetailContent
+                        property={propertyQuery.data}
+                        overview={overviewQuery.data}
+                        series={seriesQuery.data}
+                        topicImpact={topicImpactQuery.data}
+                        recentReviews={reviewsQuery.data.pages[0]?.items ?? []}
+                        scope={scope}
+                    />
+                ) : null}
+            </QueryState>
+        </div>
     )
 }
 
 function PropertyDetailContent({
     property,
-    topicMix,
+    overview,
+    series,
+    topicImpact,
     recentReviews,
     scope,
 }: {
     property: NonNullable<ReturnType<typeof usePropertyBySlugQuery>['data']>
-    topicMix: NonNullable<ReturnType<typeof usePropertyTopicMixQuery>['data']>
+    overview: NonNullable<ReturnType<typeof useDashboardOverviewQuery>['data']>
+    series: NonNullable<ReturnType<typeof useDashboardSeriesQuery>['data']>
+    topicImpact: NonNullable<ReturnType<typeof useDashboardTopicImpactQuery>['data']>
     recentReviews: ReviewListItem[]
-    scope: ReturnType<typeof resolveScopeFromSearchParams>
+    scope: ReturnType<typeof resolveScopeFromSearchParams> & { propertySlug: string }
 }) {
-    const negativeTopics = topicMix
-        .filter((row) => row.sentiment === 'negative')
-        .map((row) => ({
-            topic: row.topic as ReviewTopicKey,
-            count: Number(row.count),
-            percentage: 0,
-        }))
-
-    const negativeTotal = negativeTopics.reduce((sum, row) => sum + row.count, 0)
-    for (const topic of negativeTopics) {
-        topic.percentage = negativeTotal > 0 ? Math.round((topic.count / negativeTotal) * 100) : 0
-    }
+    const propertyRow = overview.propertyComparison[0]
 
     return (
         <div className="space-y-8">
@@ -102,7 +130,6 @@ function PropertyDetailContent({
                     </Link>
                     <h2 className="mt-2 text-2xl font-semibold tracking-tight">{property.name}</h2>
                     <p className="mt-1 text-sm text-muted-foreground">{scopeComparisonLabel(scope)}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">{property.bookingUrl}</p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
                     <Badge variant="outline" className="font-mono tabular-nums">
@@ -117,42 +144,133 @@ function PropertyDetailContent({
                 </div>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-2">
+            {propertyRow ? (
+                <div className="grid gap-4 md:grid-cols-3">
+                    <MetricCard
+                        title="Average rating"
+                        value={formatMetricValue(propertyRow.averageRating)}
+                        subtitle={`${propertyRow.reviewActivity.sampleSize} reviews`}
+                        delta={propertyRow.averageRating.delta}
+                        insufficient={propertyRow.averageRating.status === 'insufficient_data'}
+                    />
+                    <MetricCard
+                        title="Review activity"
+                        value={
+                            propertyRow.reviewActivity.value === null
+                                ? 'No reviews'
+                                : String(propertyRow.reviewActivity.value)
+                        }
+                        subtitle={formatMetricDelta(propertyRow.reviewActivity, ' reviews')}
+                        delta={propertyRow.reviewActivity.delta}
+                        deltaSuffix=""
+                        insufficient={propertyRow.reviewActivity.status === 'insufficient_data'}
+                    />
+                    <MetricCard
+                        title="Low-score rate"
+                        value={
+                            propertyRow.lowScoreRate.value === null
+                                ? 'No reviews'
+                                : `${propertyRow.lowScoreRate.value.toFixed(1)}%`
+                        }
+                        subtitle="Ratings ≤5"
+                        delta={propertyRow.lowScoreRate.delta}
+                        deltaSuffix=" pp"
+                        insufficient={propertyRow.lowScoreRate.status === 'insufficient_data'}
+                    />
+                </div>
+            ) : null}
+
+            <div className="grid gap-6 xl:grid-cols-2">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Negative topic mix</CardTitle>
-                        <CardDescription>What guests complain about at this property</CardDescription>
+                        <CardTitle>Rating trend</CardTitle>
+                        <CardDescription>Scoped to this property</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {negativeTopics.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No classified negative topics yet.</p>
+                        {series.rating.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No review history in this period.</p>
                         ) : (
-                            <NegativeTopicsChart data={negativeTopics} />
+                            <PeriodRatingTrendChart
+                                rating={series.rating}
+                                reviewVolume={series.reviewVolume}
+                                granularity={series.granularity}
+                            />
                         )}
                     </CardContent>
                 </Card>
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>All topic signals</CardTitle>
-                        <CardDescription>Positive and negative mentions detected in reviews</CardDescription>
+                        <CardTitle>Rating distribution</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-wrap gap-2">
-                        {topicMix.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No topic classifications yet.</p>
+                    <CardContent>
+                        {series.ratingBands.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No reviews in this period.</p>
                         ) : (
-                            topicMix.map((row) => (
-                                <Badge key={`${row.topic}-${row.sentiment}`} variant="outline">
-                                    {formatTopicLabel(row.topic as ReviewTopicKey)} · {row.sentiment} · {row.count}
-                                </Badge>
-                            ))
+                            <RatingBandDistributionChart data={series.ratingBands} />
                         )}
                     </CardContent>
                 </Card>
             </div>
 
+            {topicImpact.topics.length > 0 ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Topic rating impact</CardTitle>
+                        <CardDescription>
+                            Negative topics that correlate with lower scores at this property
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Topic</TableHead>
+                                    <TableHead>Mentions</TableHead>
+                                    <TableHead>Avg rating</TableHead>
+                                    <TableHead>Gap</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {topicImpact.topics.slice(0, 6).map((row) => (
+                                    <TableRow key={row.topic}>
+                                        <TableCell>{formatTopicLabel(row.topic as ReviewTopicKey)}</TableCell>
+                                        <TableCell className="font-mono tabular-nums">
+                                            {row.negativeReviewCount}
+                                        </TableCell>
+                                        <TableCell className="font-mono tabular-nums">
+                                            {row.averageRating?.toFixed(1) ?? 'n/a'}
+                                        </TableCell>
+                                        <TableCell className="font-mono tabular-nums">
+                                            {row.ratingGap !== null
+                                                ? `${row.ratingGap >= 0 ? '+' : ''}${row.ratingGap.toFixed(1)}`
+                                                : 'n/a'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            ) : null}
+
+            {overview.positiveDrivers.length > 0 ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>What guests love here</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-wrap gap-2">
+                        {overview.positiveDrivers.slice(0, 8).map((driver) => (
+                            <Badge key={driver.topic} variant="outline">
+                                {formatTopicLabel(driver.topic)} · {driver.positiveMentionRate?.toFixed(0) ?? 0}%
+                            </Badge>
+                        ))}
+                    </CardContent>
+                </Card>
+            ) : null}
+
             <div>
-                <h3 className="mb-4 text-xl font-semibold tracking-tight">Recent reviews</h3>
+                <h3 className="mb-4 text-xl font-semibold tracking-tight">Representative reviews</h3>
                 <div className="grid gap-4">
                     {recentReviews.length === 0 ? (
                         <Card>

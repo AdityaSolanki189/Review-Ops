@@ -16,7 +16,10 @@ const scraped = {
     reviewDate: new Date('2026-02-01T00:00:00.000Z'),
 }
 
-type StoredReview = Awaited<ReturnType<ReviewPersistenceAdapter['insertReview']>>
+type StoredReview = Awaited<ReturnType<ReviewPersistenceAdapter['insertReview']>> & {
+    classifierVersion?: number
+    classifiedAt?: Date
+}
 type StoredTopic = Parameters<ReviewPersistenceAdapter['insertTopics']>[0][number]
 
 function createMemoryAdapter(
@@ -63,28 +66,40 @@ function createMemoryAdapter(
             state.topics.push(...topics)
             adapter.topics = state.topics
         },
+        async updateClassifierMetadata(reviewId, metadata) {
+            const review = state.reviews.get(reviewId)
+            if (review) {
+                state.reviews.set(reviewId, {
+                    ...review,
+                    classifierVersion: metadata.classifierVersion,
+                    classifiedAt: metadata.classifiedAt,
+                })
+            }
+        },
     }
     return adapter
 }
 
 describe('review persistence', () => {
-    it('only selects reviews without topic rows for explicit reclassification', () => {
-        assert.equal(isReclassificationEligible(0), true)
-        assert.equal(isReclassificationEligible(1), false)
+    it('marks reviews with missing or outdated classifier versions as eligible', () => {
+        assert.equal(isReclassificationEligible(0, null), true)
+        assert.equal(isReclassificationEligible(3, 1), true)
+        assert.equal(isReclassificationEligible(3, 2), false)
     })
 
     it('updates a source-qualified review and replaces its topic classification when the text changes', async () => {
         const adapter = createMemoryAdapter()
         const first = await persistReview(adapter, property, scraped)
-        const second = await persistReview(adapter, property, { ...scraped, negativeText: 'The bathroom was dirty.' })
+        const second = await persistReview(adapter, property, {
+            ...scraped,
+            title: 'Dirty bathroom',
+            negativeText: 'The bathroom was dirty.',
+        })
 
         assert.equal(first.kind, 'inserted')
         assert.equal(second.kind, 'updated')
         assert.equal(adapter.reviews.size, 1)
-        assert.deepEqual(
-            adapter.topics.map((topic) => topic.topic),
-            ['cleanliness', 'noise', 'comfort', 'bathroom'],
-        )
+        assert.deepEqual(adapter.topics.map((topic) => topic.topic).sort(), ['bathroom', 'cleanliness'].sort())
     })
 
     it('reports an unchanged stable external ID as a duplicate', async () => {

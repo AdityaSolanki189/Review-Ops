@@ -1,4 +1,16 @@
-import { index, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
+import {
+    index,
+    integer,
+    jsonb,
+    numeric,
+    pgEnum,
+    pgTable,
+    text,
+    timestamp,
+    uniqueIndex,
+    uuid,
+    vector,
+} from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { timestamps } from '@/db/columns.helpers'
 
@@ -40,6 +52,8 @@ export const reviews = pgTable(
         roomType: text('room_type'),
         travellerType: text('traveller_type'),
         scrapedAt: timestamp('scraped_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+        classifierVersion: integer('classifier_version'),
+        classifiedAt: timestamp('classified_at', { withTimezone: true, mode: 'date' }),
         ...timestamps,
     },
     (table) => [
@@ -68,6 +82,14 @@ export const reviewTopicEnum = pgEnum('review_topic', [
     'comfort',
     'bathroom',
     'safety',
+    'air_conditioning',
+    'maintenance',
+    'housekeeping',
+    'smell',
+    'pests',
+    'room_condition',
+    'accessibility',
+    'booking_payment',
 ])
 
 export const reviewSentimentEnum = pgEnum('review_sentiment', ['positive', 'negative', 'neutral'])
@@ -136,3 +158,22 @@ export const reviewInsights = pgTable('review_insights', {
 
 export type ReviewInsight = typeof reviewInsights.$inferSelect
 export type NewReviewInsight = typeof reviewInsights.$inferInsert
+
+export const reviewEmbeddings = pgTable(
+    'review_embeddings',
+    {
+        id: uuid('id').defaultRandom().primaryKey(),
+        reviewId: uuid('review_id')
+            .notNull()
+            .unique()
+            .references(() => reviews.id, { onDelete: 'cascade' }),
+        embedding: vector('embedding', { dimensions: 1536 }).notNull(),
+        model: text('model').notNull(),
+        inputHash: text('input_hash').notNull(),
+        ...timestamps,
+    },
+    (table) => [index('review_embeddings_review_id_idx').on(table.reviewId)],
+)
+
+export type ReviewEmbedding = typeof reviewEmbeddings.$inferSelect
+export type NewReviewEmbedding = typeof reviewEmbeddings.$inferInsert

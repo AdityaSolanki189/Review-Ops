@@ -117,3 +117,32 @@ export function parseReviewFilters(
         },
     }
 }
+
+const searchQuerySchema = z.object({
+    q: z.string().trim().min(2).max(500),
+})
+
+export interface ParsedReviewSearchFilters extends ParsedReviewFilters {
+    q: string
+}
+
+export function parseReviewSearchParams(
+    searchParams: URLSearchParams,
+): { success: true; data: ParsedReviewSearchFilters } | { success: false; error: string } {
+    const search = searchQuerySchema.safeParse({ q: searchParams.get('q') ?? '' })
+    if (!search.success) {
+        return { success: false, error: search.error.issues[0]?.message ?? 'Invalid search query.' }
+    }
+
+    const filters = parseReviewFilters(searchParams)
+    if (!filters.success) return filters
+
+    return {
+        success: true,
+        data: {
+            ...filters.data,
+            q: search.data.q,
+            limit: Math.min(filters.data.limit, 50),
+        },
+    }
+}

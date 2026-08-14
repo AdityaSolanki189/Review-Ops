@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useSearchParams } from 'next/navigation'
@@ -13,6 +14,7 @@ import {
     SyncStatusBadge,
 } from '@/components/dashboard/dashboard-parts'
 import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
+import { IssueExplainerSheet } from '@/components/dashboard/issue-explainer-sheet'
 import { QueryState, RefreshButton } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,6 +37,7 @@ import {
     useDashboardOverviewQuery,
     useDashboardRecentReviewsQuery,
     useDashboardSeriesQuery,
+    useDashboardTopicImpactQuery,
     useDashboardTopicMatrixQuery,
     usePortfolioBriefingQuery,
     useSyncHealthQuery,
@@ -62,10 +65,15 @@ function heatCellClass(rate: number | null): string {
 export function DashboardView() {
     const searchParams = useSearchParams()
     const scope = resolveScopeFromSearchParams(searchParams)
+    const [explainerTarget, setExplainerTarget] = useState<{
+        propertySlug: string
+        topic: ReviewTopicKey
+    } | null>(null)
     const propertiesQuery = usePropertiesListQuery()
     const overviewQuery = useDashboardOverviewQuery(scope)
     const issuesQuery = useDashboardIssuesQuery(scope)
     const topicMatrixQuery = useDashboardTopicMatrixQuery(scope)
+    const topicImpactQuery = useDashboardTopicImpactQuery(scope)
     const seriesQuery = useDashboardSeriesQuery(scope)
     const recentReviewsQuery = useDashboardRecentReviewsQuery()
     const syncHealthQuery = useSyncHealthQuery()
@@ -237,6 +245,49 @@ export function DashboardView() {
             </QueryState>
 
             <QueryState
+                isLoading={overviewQuery.isLoading}
+                isError={overviewQuery.isError}
+                error={overviewQuery.error}
+                onRetry={() => overviewQuery.refetch()}
+                skeleton={
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>What guests love</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-24 w-full" />
+                        </CardContent>
+                    </Card>
+                }
+            >
+                {overview && overview.positiveDrivers.length > 0 ? (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>What guests love</CardTitle>
+                            <CardDescription>Top positive operational drivers in this period</CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                            {overview.positiveDrivers.slice(0, 6).map((driver) => (
+                                <div key={driver.topic} className="rounded-lg border p-3">
+                                    <p className="font-medium">{formatTopicLabel(driver.topic)}</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        {driver.positiveMentionRate?.toFixed(1) ?? '0'}% positive ·{' '}
+                                        {driver.mentionCount} mentions
+                                    </p>
+                                    {driver.momentumPercentagePoints !== null ? (
+                                        <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
+                                            {driver.momentumPercentagePoints >= 0 ? '+' : ''}
+                                            {driver.momentumPercentagePoints.toFixed(1)} pp vs prior
+                                        </p>
+                                    ) : null}
+                                </div>
+                            ))}
+                        </CardContent>
+                    </Card>
+                ) : null}
+            </QueryState>
+
+            <QueryState
                 isLoading={issuesQuery.isLoading}
                 isError={issuesQuery.isError}
                 error={issuesQuery.error}
@@ -272,11 +323,17 @@ export function DashboardView() {
                                         <TableRow>
                                             <TableHead>Property</TableHead>
                                             <TableHead>Topic</TableHead>
-                                            <TableHead>Negative rate</TableHead>
+                                            <TableHead title="Negative mentions as % of all reviews in period">
+                                                Of all reviews
+                                            </TableHead>
+                                            <TableHead title="Negative mentions as % of low-score reviews (≤5)">
+                                                Of low scores
+                                            </TableHead>
                                             <TableHead>Change</TableHead>
                                             <TableHead>Rating gap</TableHead>
                                             <TableHead>Sample</TableHead>
                                             <TableHead>Latest</TableHead>
+                                            <TableHead />
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
@@ -297,7 +354,14 @@ export function DashboardView() {
                                                     </TableCell>
                                                     <TableCell>{formatTopicLabel(issue.topic)}</TableCell>
                                                     <TableCell className="font-mono tabular-nums">
-                                                        {issue.negativeMentionRate.toFixed(1)}%
+                                                        {issue.portfolioNegativeShare !== null
+                                                            ? `${issue.portfolioNegativeShare.toFixed(1)}%`
+                                                            : 'n/a'}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {issue.negativeReviewShare !== null
+                                                            ? `${issue.negativeReviewShare.toFixed(1)}%`
+                                                            : 'n/a'}
                                                     </TableCell>
                                                     <TableCell className="font-mono tabular-nums">
                                                         {issue.momentumPercentagePoints !== null
@@ -321,6 +385,20 @@ export function DashboardView() {
                                                         {issue.latestReviewAt
                                                             ? format(new Date(issue.latestReviewAt), 'd MMM yyyy')
                                                             : '-'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <button
+                                                            type="button"
+                                                            className="text-sm font-medium text-primary hover:underline"
+                                                            onClick={() =>
+                                                                setExplainerTarget({
+                                                                    propertySlug: issue.propertySlug,
+                                                                    topic: issue.topic,
+                                                                })
+                                                            }
+                                                        >
+                                                            Explain
+                                                        </button>
                                                     </TableCell>
                                                 </TableRow>
                                             )
@@ -388,13 +466,25 @@ export function DashboardView() {
                                                     })
                                                     return (
                                                         <TableCell key={topic} className="p-1">
-                                                            <Link
-                                                                href={href}
-                                                                className={`block rounded px-2 py-1 text-center text-xs font-mono tabular-nums ${heatCellClass(cell.negativeMentionRate)}`}
+                                                            <button
+                                                                type="button"
+                                                                className={`block w-full rounded px-2 py-1 text-center text-xs font-mono tabular-nums ${heatCellClass(cell.negativeMentionRate)}`}
+                                                                onClick={() =>
+                                                                    setExplainerTarget({
+                                                                        propertySlug: row.property.slug,
+                                                                        topic: topic as ReviewTopicKey,
+                                                                    })
+                                                                }
                                                             >
                                                                 {cell.negativeMentionRate === null
                                                                     ? '-'
                                                                     : `${cell.negativeMentionRate.toFixed(0)}%`}
+                                                            </button>
+                                                            <Link
+                                                                href={href}
+                                                                className="mt-1 block text-center text-[10px] text-primary hover:underline"
+                                                            >
+                                                                Reviews
                                                             </Link>
                                                         </TableCell>
                                                     )
@@ -404,6 +494,68 @@ export function DashboardView() {
                                     </TableBody>
                                 </Table>
                             )}
+                        </CardContent>
+                    </Card>
+                ) : null}
+            </QueryState>
+
+            <QueryState
+                isLoading={topicImpactQuery.isLoading}
+                isError={topicImpactQuery.isError}
+                error={topicImpactQuery.error}
+                onRetry={() => topicImpactQuery.refetch()}
+                skeleton={
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Topic rating impact</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-40 w-full" />
+                        </CardContent>
+                    </Card>
+                }
+            >
+                {topicImpactQuery.data && topicImpactQuery.data.topics.length > 0 ? (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Topic rating impact</CardTitle>
+                            <CardDescription>
+                                Which negative topics correlate with the lowest scores (association, not causality)
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Topic</TableHead>
+                                        <TableHead>Negative mentions</TableHead>
+                                        <TableHead>Avg rating</TableHead>
+                                        <TableHead>Rating gap</TableHead>
+                                        <TableHead>Impact score</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {topicImpactQuery.data.topics.slice(0, 8).map((row) => (
+                                        <TableRow key={row.topic}>
+                                            <TableCell>{formatTopicLabel(row.topic)}</TableCell>
+                                            <TableCell className="font-mono tabular-nums">
+                                                {row.negativeReviewCount}
+                                            </TableCell>
+                                            <TableCell className="font-mono tabular-nums">
+                                                {row.averageRating?.toFixed(1) ?? 'n/a'}
+                                            </TableCell>
+                                            <TableCell className="font-mono tabular-nums">
+                                                {row.ratingGap !== null
+                                                    ? `${row.ratingGap >= 0 ? '+' : ''}${row.ratingGap.toFixed(1)}`
+                                                    : 'n/a'}
+                                            </TableCell>
+                                            <TableCell className="font-mono tabular-nums">
+                                                {row.impactScore !== null ? row.impactScore.toFixed(1) : 'n/a'}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                         </CardContent>
                     </Card>
                 ) : null}
@@ -664,6 +816,18 @@ export function DashboardView() {
                     </div>
                 ) : null}
             </QueryState>
+
+            {explainerTarget ? (
+                <IssueExplainerSheet
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setExplainerTarget(null)
+                    }}
+                    scope={scope}
+                    propertySlug={explainerTarget.propertySlug}
+                    topic={explainerTarget.topic}
+                />
+            ) : null}
         </div>
     )
 }

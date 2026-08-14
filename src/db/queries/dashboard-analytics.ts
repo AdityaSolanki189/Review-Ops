@@ -2,8 +2,14 @@ import { and, asc, count, desc, eq, gte, lt, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { properties, reviews, reviewTopics } from '@/db/schema'
 import { cachedQuery } from '@/lib/cache/cached'
-import { getSeriesGranularity, type AnalyticsPeriod, type ResolvedAnalyticsScope } from '@/lib/analytics'
+import {
+    getSeriesGranularity,
+    type AnalyticsPeriod,
+    type ResolvedAnalyticsScope,
+    calculateRatingGap,
+} from '@/lib/analytics'
 import { mapIssueSignals, mapOverviewResponse, mapTopicMatrixResponse } from '@/lib/dashboard-analytics'
+import type { ReviewTopicKey } from '@/lib/classification/topics'
 
 const DASHBOARD_CACHE_TTL = 300
 
@@ -204,6 +210,8 @@ export async function getDashboardIssues(scope: ResolvedAnalyticsScope) {
             issues: mapIssueSignals({
                 scope,
                 scopeAverageRating: currentSummary.averageRating,
+                scopeReviewCount: currentSummary.reviewCount,
+                scopeLowScoreCount: currentSummary.lowScoreCount,
                 currentIssues,
                 previousIssues,
                 currentProperties,
@@ -308,6 +316,60 @@ export async function getDashboardSeries(scope: ResolvedAnalyticsScope) {
             })),
             reviewVolume: seriesRows.map((row) => ({ bucket: row.bucket, value: number(row.reviewCount) })),
             ratingBands: ratingBands.map((row) => ({ band: row.band, reviewCount: number(row.reviewCount) })),
+        }
+    })
+}
+
+export interface TopicImpactRow {
+    topic: ReviewTopicKey
+    negativeReviewCount: number
+    averageRating: number | null
+    ratingGap: number | null
+    impactScore: number | null
+}
+
+export async function getDashboardTopicImpact(scope: ResolvedAnalyticsScope) {
+    return cachedQuery(scopeCacheKey('dashboard:topic-impact', scope), DASHBOARD_CACHE_TTL, async () => {
+        const [summary, rows] = await Promise.all([
+            getPeriodSummary(scope, scope),
+            db
+                .select({
+                    topic: reviewTopics.topic,
+                    negativeReviewCount: sql<number>`count(distinct ${reviewTopics.reviewId})`,
+                    averageRating: sql<number | null>`avg(${reviews.ratingNumeric})`,
+                })
+                .from(reviewTopics)
+                .innerJoin(reviews, eq(reviews.id, reviewTopics.reviewId))
+                .innerJoin(properties, eq(properties.id, reviews.propertyId))
+                .where(and(scopeConditions(scope, scope), eq(reviewTopics.sentiment, 'negative')))
+                .groupBy(reviewTopics.topic)
+                .orderBy(desc(sql`count(distinct ${reviewTopics.reviewId})`)),
+        ])
+
+        const topics: TopicImpactRow[] = rows.map((row) => {
+            const negativeReviewCount = number(row.negativeReviewCount)
+            const averageRating = row.averageRating === null ? null : number(row.averageRating)
+            const ratingGap = calculateRatingGap(averageRating, summary.averageRating)
+            const impactScore =
+                ratingGap === null || summary.reviewCount === 0 ? null : Math.abs(ratingGap) * negativeReviewCount
+
+            return {
+                topic: row.topic,
+                negativeReviewCount,
+                averageRating,
+                ratingGap,
+                impactScore,
+            }
+        })
+
+        return {
+            scope: scope.public,
+            scopeAverageRating: summary.averageRating,
+            scopeReviewCount: summary.reviewCount,
+            topics: topics.sort(
+                (left, right) =>
+                    (right.impactScore ?? Number.NEGATIVE_INFINITY) - (left.impactScore ?? Number.NEGATIVE_INFINITY),
+            ),
         }
     })
 }

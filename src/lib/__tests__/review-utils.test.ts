@@ -25,6 +25,7 @@ describe('classifyReview', () => {
             negativeText: 'The bathroom was dirty and smelled bad',
         })
 
-        assert.ok(topics.some((topic) => topic.topic === 'cleanliness' && topic.sentiment === 'negative'))
+        assert.ok(topics.some((topic) => topic.topic === 'bathroom' && topic.sentiment === 'negative'))
+        assert.ok(topics.some((topic) => topic.topic === 'smell' && topic.sentiment === 'negative'))
     })
 })

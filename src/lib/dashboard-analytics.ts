@@ -157,6 +157,25 @@ export function mapOverviewResponse(input: {
             sampleSize: input.current.reviewCount,
             previousSampleSize: input.previous.reviewCount,
         }),
+        positiveDrivers: input.currentPositiveTopics.map((row) => {
+            const previousCount = previousPositiveTopics.get(row.topic) ?? 0
+            const currentRate = calculateRate(row.reviewCount, input.current.reviewCount)
+            const previousRate =
+                input.previous.reviewCount > 0 ? calculateRate(previousCount, input.previous.reviewCount) : null
+            const metric = createMetric({
+                value: currentRate,
+                previousValue: previousRate,
+                sampleSize: input.current.reviewCount,
+                previousSampleSize: input.previous.reviewCount,
+            })
+            return {
+                topic: row.topic,
+                mentionCount: row.reviewCount,
+                positiveMentionRate: currentRate,
+                momentumPercentagePoints: metric.delta,
+                status: metric.status,
+            }
+        }),
         propertyComparison: input.properties.map((property) => {
             const current = currentByProperty.get(property.slug)
             const previous = previousByProperty.get(property.slug)
@@ -190,6 +209,8 @@ export function mapOverviewResponse(input: {
 export function mapIssueSignals(input: {
     scope: ResolvedAnalyticsScope
     scopeAverageRating: number | null
+    scopeReviewCount: number
+    scopeLowScoreCount: number
     currentIssues: IssueRow[]
     previousIssues: IssueRow[]
     currentProperties: PropertyCountRow[]
@@ -217,6 +238,10 @@ export function mapIssueSignals(input: {
             propertySlug: row.slug,
             topic: row.topic,
             negativeMentionRate,
+            negativeReviewShare:
+                input.scopeLowScoreCount > 0 ? calculateRate(row.reviewCount, input.scopeLowScoreCount) : null,
+            portfolioNegativeShare:
+                input.scopeReviewCount > 0 ? calculateRate(row.reviewCount, input.scopeReviewCount) : null,
             previousMentionRate,
             momentumPercentagePoints: metric.delta,
             ratingGap: calculateRatingGap(row.averageRating, input.scopeAverageRating),

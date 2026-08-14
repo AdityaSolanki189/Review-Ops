@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { reviews, reviewTopics, scrapeRuns, type Property } from '@/db/schema'
 import { invalidateCache } from '@/lib/cache/cached'
-import { classifyReview } from '@/lib/classification/topics'
+import { classifyReview, CLASSIFIER_VERSION } from '@/lib/classification/topics'
 import { buildExternalId, buildReviewFingerprint } from '@/lib/deduplicate'
 import type { ScrapedReview } from '@/lib/validations/review'
 
@@ -41,6 +41,10 @@ export interface ReviewPersistenceAdapter {
     updateReview(id: string, values: ReviewValues): Promise<PersistedReview>
     deleteTopics(reviewId: string): Promise<void>
     insertTopics(topics: TopicValues[]): Promise<void>
+    updateClassifierMetadata(
+        reviewId: string,
+        metadata: { classifierVersion: number; classifiedAt: Date },
+    ): Promise<void>
 }
 
 export type ReviewPersistenceResult =
@@ -107,6 +111,10 @@ export async function persistReview(
                 topics.map((topic) => ({ ...topic, reviewId: persisted.id, confidence: String(topic.confidence) })),
             )
         }
+        await transaction.updateClassifierMetadata(persisted.id, {
+            classifierVersion: CLASSIFIER_VERSION,
+            classifiedAt: new Date(),
+        })
         return existing ? { kind: 'updated', reviewId: persisted.id } : { kind: 'inserted', reviewId: persisted.id }
     })
 }
@@ -138,6 +146,15 @@ function createDbAdapter(database: typeof db): ReviewPersistenceAdapter {
         },
         async insertTopics(topics) {
             await database.insert(reviewTopics).values(topics)
+        },
+        async updateClassifierMetadata(reviewId, metadata) {
+            await database
+                .update(reviews)
+                .set({
+                    classifierVersion: metadata.classifierVersion,
+                    classifiedAt: metadata.classifiedAt,
+                })
+                .where(eq(reviews.id, reviewId))
         },
     }
 }

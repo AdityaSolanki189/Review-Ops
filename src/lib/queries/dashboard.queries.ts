@@ -9,6 +9,9 @@ type DashboardIssues = Awaited<ReturnType<typeof import('@/db/queries/dashboard-
 type DashboardTopicMatrix = Awaited<
     ReturnType<typeof import('@/db/queries/dashboard-analytics').getDashboardTopicMatrix>
 >
+type DashboardTopicImpact = Awaited<
+    ReturnType<typeof import('@/db/queries/dashboard-analytics').getDashboardTopicImpact>
+>
 type DashboardSeries = Awaited<ReturnType<typeof import('@/db/queries/dashboard-analytics').getDashboardSeries>>
 type RecentReviews = Awaited<ReturnType<typeof import('@/db/queries/analytics').getRecentReviews>>['items']
 type SyncHealth = Awaited<ReturnType<typeof import('@/db/queries/analytics').getSyncHealth>>
@@ -24,6 +27,10 @@ async function fetchIssues(scope: AnalyticsScope): Promise<DashboardIssues> {
 
 async function fetchTopicMatrix(scope: AnalyticsScope): Promise<DashboardTopicMatrix> {
     return fetchJson(buildDashboardApiUrl('/api/dashboard/topic-matrix', scope))
+}
+
+async function fetchTopicImpact(scope: AnalyticsScope): Promise<DashboardTopicImpact> {
+    return fetchJson(buildDashboardApiUrl('/api/dashboard/topic-impact', scope))
 }
 
 async function fetchSeries(scope: AnalyticsScope): Promise<DashboardSeries> {
@@ -63,6 +70,13 @@ export function useDashboardTopicMatrixQuery(scope: AnalyticsScope) {
     })
 }
 
+export function useDashboardTopicImpactQuery(scope: AnalyticsScope) {
+    return useQuery({
+        queryKey: queryKeys.dashboard.topicImpact(scope),
+        queryFn: () => fetchTopicImpact(scope),
+    })
+}
+
 export function useDashboardSeriesQuery(scope: AnalyticsScope) {
     return useQuery({
         queryKey: queryKeys.dashboard.series(scope),
@@ -96,6 +110,7 @@ export type {
     DashboardOverview,
     DashboardIssues,
     DashboardTopicMatrix,
+    DashboardTopicImpact,
     DashboardSeries,
     PortfolioBriefing,
     RecentReviews,

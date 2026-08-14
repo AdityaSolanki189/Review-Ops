@@ -15,6 +15,8 @@ describe('mapIssueSignals', () => {
         const issues = mapIssueSignals({
             scope,
             scopeAverageRating: 8,
+            scopeReviewCount: 10,
+            scopeLowScoreCount: 2,
             currentIssues: [
                 {
                     slug: 'central-sydney',
@@ -34,6 +36,8 @@ describe('mapIssueSignals', () => {
                 propertySlug: 'central-sydney',
                 topic: 'noise',
                 negativeMentionRate: 20,
+                negativeReviewShare: 100,
+                portfolioNegativeShare: 20,
                 previousMentionRate: 0,
                 momentumPercentagePoints: 20,
                 ratingGap: -3,
@@ -48,6 +52,8 @@ describe('mapIssueSignals', () => {
         const [issue] = mapIssueSignals({
             scope,
             scopeAverageRating: 8,
+            scopeReviewCount: 10,
+            scopeLowScoreCount: 2,
             currentIssues: [
                 {
                     slug: 'central-sydney',

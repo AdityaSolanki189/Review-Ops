@@ -339,7 +339,7 @@ function getRepresentativeRank(filters: ReviewFilters) {
     ) then 0 else 1 end`
 }
 
-async function attachTopics(
+export async function attachTopics(
     rows: Array<{ review: typeof reviews.$inferSelect; property: typeof properties.$inferSelect }>,
 ) {
     const reviewIds = rows.map((row) => row.review.id)
@@ -422,9 +422,10 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
                   .limit(limit + 1)
 
     const hasMore = rows.length > limit
-    const pageRows = (hasMore ? rows.slice(0, limit) : rows).map((row) => ({
-        review: row.review,
-        property: row.property,
+    type ReviewPropertyRow = { review: typeof reviews.$inferSelect; property: typeof properties.$inferSelect }
+    const pageRows: ReviewPropertyRow[] = (hasMore ? rows.slice(0, limit) : rows).map((row) => ({
+        review: row.review as typeof reviews.$inferSelect,
+        property: row.property as typeof properties.$inferSelect,
     }))
     const items = await attachTopics(pageRows)
     const last = items.at(-1)

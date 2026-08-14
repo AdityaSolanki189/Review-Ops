@@ -13,6 +13,7 @@ const envSchema = z.object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     OPENROUTER_API_KEY: z.string().min(1).optional(),
     OPENROUTER_MODEL: z.string().min(1).default('openai/gpt-4o-mini'),
+    OPENROUTER_EMBEDDING_MODEL: z.string().min(1).default('openai/text-embedding-3-small'),
 })
 
 export type Env = z.infer<typeof envSchema>
@@ -24,6 +25,7 @@ function validateEnv(): Env {
             NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
             NODE_ENV: (process.env.NODE_ENV as 'development' | 'test' | 'production') || 'development',
             OPENROUTER_MODEL: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+            OPENROUTER_EMBEDDING_MODEL: process.env.OPENROUTER_EMBEDDING_MODEL || 'openai/text-embedding-3-small',
         }
     }
 

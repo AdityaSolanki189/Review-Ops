@@ -6,6 +6,8 @@ import { properties } from '@/db/schema'
 import { seedProperties } from '@/lib/seed'
 import { scrapePropertyReviews } from './booking'
 import { createScrapeRun, finishScrapeRun, insertReview } from './deduplicate'
+import { embedReviewsByIds } from '@/lib/ai/embeddings'
+import { isEmbeddingConfigured } from '@/lib/ai/openrouter'
 import { maxReviewDate } from './graphql'
 import { SCRAPE_CONFIG } from './selectors'
 import { sleep, withRetry } from './retry'
@@ -53,6 +55,7 @@ async function scrapeSingleProperty(propertyId: string) {
                     let reviewsUpdated = 0
                     let newestReviewDate: Date | null = null
                     let dbCount = initialDbCount
+                    const embeddedReviewIds: string[] = []
 
                     const scrapeResult = await scrapePropertyReviews(
                         browser,
@@ -92,9 +95,11 @@ async function scrapeSingleProperty(propertyId: string) {
                                     reviewsInserted += 1
                                     pageInserted += 1
                                     dbCount += 1
+                                    embeddedReviewIds.push(persisted.reviewId)
                                 } else {
                                     reviewsUpdated += 1
                                     pageUpdated += 1
+                                    embeddedReviewIds.push(persisted.reviewId)
                                 }
                             }
 
@@ -205,6 +210,15 @@ async function scrapeSingleProperty(propertyId: string) {
                     console.log(
                         `  Done: ${reviewsFound} parsed, ${reviewsInserted} inserted and ${reviewsUpdated} updated this run, ${finalDbCount}/${scrapeResult.reviewsCount} in DB across ${scrapeResult.pagesFetched} page(s)`,
                     )
+
+                    if (isEmbeddingConfigured() && embeddedReviewIds.length > 0) {
+                        try {
+                            const embedded = await embedReviewsByIds(embeddedReviewIds)
+                            console.log(`  Embedded ${embedded} review(s) for semantic search.`)
+                        } catch (embedError) {
+                            console.warn('  Embedding step failed (scrape still succeeded):', embedError)
+                        }
+                    }
 
                     return { property: property.name, status: 'success' as const, reviewsInserted }
                 } finally {

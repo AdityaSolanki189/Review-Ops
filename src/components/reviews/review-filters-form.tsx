@@ -9,6 +9,7 @@ import { formatTopicLabel, TOPIC_KEYWORDS, type ReviewTopicKey } from '@/lib/cla
 interface ReviewFiltersFormProps {
     properties: Property[]
     params: {
+        q?: string
         property?: string
         minRating?: string
         maxRating?: string
@@ -33,6 +34,7 @@ export function ReviewFiltersForm({ properties, params, onSubmit }: ReviewFilter
     const fromId = useId()
     const toId = useId()
     const sortId = useId()
+    const searchId = useId()
     const topicOptions = Object.keys(TOPIC_KEYWORDS) as ReviewTopicKey[]
 
     return (
@@ -41,6 +43,17 @@ export function ReviewFiltersForm({ properties, params, onSubmit }: ReviewFilter
             className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-3 xl:grid-cols-4"
             onSubmit={onSubmit}
         >
+            <div className="space-y-2 md:col-span-2 xl:col-span-4">
+                <label htmlFor={searchId} className="text-sm font-medium">
+                    Semantic search
+                </label>
+                <Input
+                    id={searchId}
+                    name="q"
+                    defaultValue={params.q ?? ''}
+                    placeholder="e.g. guests complaining about bathrooms smelling bad"
+                />
+            </div>
             <div className="space-y-2">
                 <label htmlFor={ratingBandId} className="text-sm font-medium">
                     Rating band

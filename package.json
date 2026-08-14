@@ -20,7 +20,8 @@
         "db:push": "drizzle-kit push --config=drizzle.config.ts",
         "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
         "db:seed": "tsx scripts/seed.ts",
-        "reviews:reclassify": "tsx scripts/reclassify-reviews.ts"
+        "reviews:reclassify": "tsx scripts/reclassify-reviews.ts",
+        "reviews:embed": "tsx scripts/embed-reviews.ts"
     },
     "dependencies": {
         "@hookform/resolvers": "^5.2.2",

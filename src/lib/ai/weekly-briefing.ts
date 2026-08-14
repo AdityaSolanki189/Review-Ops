@@ -166,8 +166,3 @@ export async function getPortfolioBriefing(scope?: AnalyticsScope): Promise<Port
     const cacheKey = `briefing:${resolvedScope.public.propertySlug ?? 'all'}:${resolvedScope.public.from}:${resolvedScope.public.to}`
     return cachedQuery(cacheKey, 3600, () => buildPortfolioBriefing(resolvedScope.public))
 }
-
-/** @deprecated Use getPortfolioBriefing with scope instead */
-export async function getWeeklyBriefing(_referenceDate = new Date()): Promise<PortfolioBriefingResult> {
-    return getPortfolioBriefing()
-}

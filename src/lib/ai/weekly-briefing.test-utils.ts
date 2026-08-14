@@ -58,6 +58,15 @@ function createOverviewFixture(reviewCount = 20) {
             sampleSize: reviewCount,
             status: 'available' as const,
         },
+        positiveDrivers: [
+            {
+                topic: 'location' as const,
+                mentionCount: 8,
+                positiveMentionRate: 42,
+                momentumPercentagePoints: 7,
+                status: 'available' as const,
+            },
+        ],
         propertyComparison: [
             {
                 property: { slug: 'olympic-paddington', name: 'Olympic Hotel Paddington' },
@@ -94,6 +103,8 @@ const issuesFixture = {
             propertySlug: 'central-sydney',
             topic: 'cleanliness' as const,
             negativeMentionRate: 30,
+            negativeReviewShare: 50,
+            portfolioNegativeShare: 30,
             previousMentionRate: 10,
             momentumPercentagePoints: 8,
             ratingGap: -1.2,

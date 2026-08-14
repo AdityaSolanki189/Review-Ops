@@ -217,42 +217,6 @@ export function FreshnessStrip({
     )
 }
 
-/** @deprecated Use MetricCard */
-export function StatCard({
-    title,
-    value,
-    subtitle,
-    delta,
-}: {
-    title: string
-    value: string
-    subtitle?: string
-    delta?: number
-}) {
-    return (
-        <Card>
-            <CardContent className="space-y-3 pt-6">
-                <p className="text-sm font-medium text-muted-foreground">{title}</p>
-                <div className="flex items-end justify-between gap-4">
-                    <div>
-                        <p className="font-mono text-3xl font-semibold tabular-nums tracking-tight">{value}</p>
-                        {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
-                    </div>
-                    {delta !== undefined ? (
-                        <Badge
-                            variant={delta > 0 ? 'default' : delta < 0 ? 'destructive' : 'outline'}
-                            className="font-mono tabular-nums"
-                        >
-                            {delta >= 0 ? '+' : ''}
-                            {delta.toFixed(1)}
-                        </Badge>
-                    ) : null}
-                </div>
-            </CardContent>
-        </Card>
-    )
-}
-
 export function StaleDataBanner() {
     return (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
