@@ -2,6 +2,8 @@ import { Suspense } from 'react'
 import { PropertyDetailView } from '@/components/properties/property-detail-view'
 import { Skeleton } from '@/components/ui/skeleton'
 
+export const dynamic = 'force-dynamic'
+
 interface PropertyDetailPageProps {
     params: Promise<{ slug: string }>
 }

@@ -8,8 +8,6 @@ import TopLoader from '@/components/top-loader'
 import { config } from '@/lib/config/server'
 import { cn } from '@/lib/utils/utils'
 
-export const dynamic = 'force-dynamic'
-
 export const metadata: Metadata = {
     title: {
         default: config.app.name,

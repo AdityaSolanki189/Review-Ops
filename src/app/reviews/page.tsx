@@ -2,6 +2,8 @@ import { Suspense } from 'react'
 import { ReviewsView } from '@/components/reviews/reviews-view'
 import { Skeleton } from '@/components/ui/skeleton'
 
+export const dynamic = 'force-dynamic'
+
 export default function ReviewsPage() {
     return (
         <Suspense

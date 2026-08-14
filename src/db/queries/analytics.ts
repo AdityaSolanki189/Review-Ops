@@ -76,30 +76,34 @@ async function loadWeeklyStats(referenceDate: Date) {
     const lastWeekStart = new Date(thisWeekStart)
     lastWeekStart.setDate(lastWeekStart.getDate() - 7)
 
-    const [thisWeek] = await db
-        .select({
-            avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
-            reviewCount: count(),
-        })
-        .from(reviews)
-        .where(and(gte(reviews.reviewDate, thisWeekStart), lt(reviews.reviewDate, nextWeekStart)))
+    const [thisWeek, lastWeek] = await Promise.all([
+        db
+            .select({
+                avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
+                reviewCount: count(),
+            })
+            .from(reviews)
+            .where(and(gte(reviews.reviewDate, thisWeekStart), lt(reviews.reviewDate, nextWeekStart))),
+        db
+            .select({
+                avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
+                reviewCount: count(),
+            })
+            .from(reviews)
+            .where(and(gte(reviews.reviewDate, lastWeekStart), lt(reviews.reviewDate, thisWeekStart))),
+    ])
 
-    const [lastWeek] = await db
-        .select({
-            avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
-            reviewCount: count(),
-        })
-        .from(reviews)
-        .where(and(gte(reviews.reviewDate, lastWeekStart), lt(reviews.reviewDate, thisWeekStart)))
+    const [thisWeekRow] = thisWeek
+    const [lastWeekRow] = lastWeek
 
     return {
         thisWeek: {
-            avgRating: Number(thisWeek?.avgRating ?? 0),
-            reviewCount: Number(thisWeek?.reviewCount ?? 0),
+            avgRating: Number(thisWeekRow?.avgRating ?? 0),
+            reviewCount: Number(thisWeekRow?.reviewCount ?? 0),
         },
         lastWeek: {
-            avgRating: Number(lastWeek?.avgRating ?? 0),
-            reviewCount: Number(lastWeek?.reviewCount ?? 0),
+            avgRating: Number(lastWeekRow?.avgRating ?? 0),
+            reviewCount: Number(lastWeekRow?.reviewCount ?? 0),
         },
     }
 }
@@ -115,7 +119,7 @@ async function loadPropertyPerformance(referenceDate: Date) {
     const lastWeekStart = new Date(thisWeekStart)
     lastWeekStart.setDate(lastWeekStart.getDate() - 7)
 
-    const allProperties = await loadAllProperties()
+    const allProperties = await getAllProperties()
 
     const [thisWeekStats, lastWeekStats, totalStats] = await Promise.all([
         db
@@ -174,33 +178,40 @@ async function loadNegativeTopicTrends(referenceDate: Date) {
     const nextWeekStart = new Date(thisWeekStart)
     nextWeekStart.setDate(nextWeekStart.getDate() + 7)
 
-    const negativeReviews = await db
-        .select({ id: reviews.id })
-        .from(reviews)
-        .where(
-            and(
-                gte(reviews.reviewDate, thisWeekStart),
-                lt(reviews.reviewDate, nextWeekStart),
-                lte(reviews.ratingNumeric, '5'),
+    const [negativeCountRow, topicCounts] = await Promise.all([
+        db
+            .select({ count: count() })
+            .from(reviews)
+            .where(
+                and(
+                    gte(reviews.reviewDate, thisWeekStart),
+                    lt(reviews.reviewDate, nextWeekStart),
+                    lte(reviews.ratingNumeric, '5'),
+                ),
             ),
-        )
+        db
+            .select({
+                topic: reviewTopics.topic,
+                count: count(),
+            })
+            .from(reviewTopics)
+            .innerJoin(reviews, eq(reviewTopics.reviewId, reviews.id))
+            .where(
+                and(
+                    gte(reviews.reviewDate, thisWeekStart),
+                    lt(reviews.reviewDate, nextWeekStart),
+                    lte(reviews.ratingNumeric, '5'),
+                    eq(reviewTopics.sentiment, 'negative'),
+                ),
+            )
+            .groupBy(reviewTopics.topic)
+            .orderBy(desc(count())),
+    ])
 
-    const negativeCount = negativeReviews.length
+    const negativeCount = Number(negativeCountRow[0]?.count ?? 0)
     if (negativeCount === 0) {
         return []
     }
-
-    const negativeIds = negativeReviews.map((r) => r.id)
-
-    const topicCounts = await db
-        .select({
-            topic: reviewTopics.topic,
-            count: count(),
-        })
-        .from(reviewTopics)
-        .where(and(inArray(reviewTopics.reviewId, negativeIds), eq(reviewTopics.sentiment, 'negative')))
-        .groupBy(reviewTopics.topic)
-        .orderBy(desc(count()))
 
     return topicCounts.map((row) => ({
         topic: row.topic as ReviewTopicKey,
@@ -264,26 +275,31 @@ async function loadTopicInsightsForPeriod(input: {
         ratingConditions.push(lte(reviews.ratingNumeric, String(input.maxRating)))
     }
 
-    const scopedReviews = await db
-        .select({ id: reviews.id })
-        .from(reviews)
-        .where(and(gte(reviews.reviewDate, input.from), lt(reviews.reviewDate, input.toExclusive), ...ratingConditions))
+    const dateConditions = and(
+        gte(reviews.reviewDate, input.from),
+        lt(reviews.reviewDate, input.toExclusive),
+        ...ratingConditions,
+    )
 
-    const totalReviews = scopedReviews.length
+    const [totalReviewsRow, topTopicRows] = await Promise.all([
+        db.select({ count: count() }).from(reviews).where(dateConditions),
+        db
+            .select({
+                topic: reviewTopics.topic,
+                count: count(),
+            })
+            .from(reviewTopics)
+            .innerJoin(reviews, eq(reviewTopics.reviewId, reviews.id))
+            .where(and(dateConditions, eq(reviewTopics.sentiment, input.sentiment)))
+            .groupBy(reviewTopics.topic)
+            .orderBy(desc(count()))
+            .limit(1),
+    ])
+
+    const totalReviews = Number(totalReviewsRow[0]?.count ?? 0)
     if (totalReviews === 0) return null
 
-    const reviewIds = scopedReviews.map((review) => review.id)
-    const [topTopic] = await db
-        .select({
-            topic: reviewTopics.topic,
-            count: count(),
-        })
-        .from(reviewTopics)
-        .where(and(inArray(reviewTopics.reviewId, reviewIds), eq(reviewTopics.sentiment, input.sentiment)))
-        .groupBy(reviewTopics.topic)
-        .orderBy(desc(count()))
-        .limit(1)
-
+    const topTopic = topTopicRows[0]
     if (!topTopic) return null
 
     const topicCount = Number(topTopic.count)
@@ -300,7 +316,7 @@ async function loadTopicInsightsForPeriod(input: {
 
 async function loadWeeklySnapshot(referenceDate: Date): Promise<WeeklySnapshot> {
     const bounds = getSydneyWeekBounds(referenceDate)
-    const allProperties = await loadAllProperties()
+    const allProperties = await getAllProperties()
 
     const [thisWeekSummary, lastWeekSummary, thisWeekByProperty, lastWeekByProperty] = await Promise.all([
         db
@@ -757,7 +773,7 @@ export async function getRatingDistribution(referenceDate = new Date()) {
 }
 
 async function loadLatestScrapeRuns() {
-    const allProperties = await loadAllProperties()
+    const allProperties = await getAllProperties()
 
     const latestRuns = await db
         .select()

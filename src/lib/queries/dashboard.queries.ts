@@ -103,11 +103,12 @@ export function useSyncHealthQuery() {
     })
 }
 
-export function usePortfolioBriefingQuery(scope: AnalyticsScope) {
+export function usePortfolioBriefingQuery(scope: AnalyticsScope, options?: { enabled?: boolean }) {
     return useQuery({
         queryKey: queryKeys.dashboard.briefing(scope),
         queryFn: () => fetchPortfolioBriefing(scope),
         staleTime: 60_000,
+        enabled: options?.enabled ?? true,
     })
 }
 

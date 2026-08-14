@@ -5,13 +5,16 @@ import {
     getDashboardIssues,
     getDashboardOverview,
     getDashboardSeries,
+    getDashboardTopicImpact,
     getDashboardTopicMatrix,
 } from '@/db/queries/dashboard-analytics'
-import { getRecentReviews, getSyncHealth } from '@/db/queries/analytics'
+import { getAllProperties, getRecentReviews, getSyncHealth, getWeeklySnapshot } from '@/db/queries/analytics'
 import { resolveAnalyticsScope } from '@/lib/analytics'
 import { defaultAnalyticsScope } from '@/lib/dashboard-scope'
 import { queryKeys } from '@/lib/queries/keys'
 import { Skeleton } from '@/components/ui/skeleton'
+
+export const dynamic = 'force-dynamic'
 
 function DashboardFallback() {
     return (
@@ -28,7 +31,7 @@ function DashboardFallback() {
     )
 }
 
-export default async function DashboardPage() {
+async function DashboardHydratedContent() {
     const queryClient = new QueryClient()
     const scope = defaultAnalyticsScope()
     const resolved = resolveAnalyticsScope(scope)
@@ -47,6 +50,10 @@ export default async function DashboardPage() {
             queryFn: () => getDashboardTopicMatrix(resolved),
         }),
         queryClient.prefetchQuery({
+            queryKey: queryKeys.dashboard.topicImpact(scope),
+            queryFn: () => getDashboardTopicImpact(resolved),
+        }),
+        queryClient.prefetchQuery({
             queryKey: queryKeys.dashboard.series(scope),
             queryFn: () => getDashboardSeries(resolved),
         }),
@@ -58,6 +65,14 @@ export default async function DashboardPage() {
             queryKey: queryKeys.dashboard.syncHealth,
             queryFn: () => getSyncHealth(),
         }),
+        queryClient.prefetchQuery({
+            queryKey: queryKeys.properties.list,
+            queryFn: () => getAllProperties(),
+        }),
+        queryClient.prefetchQuery({
+            queryKey: queryKeys.dashboard.weeklySnapshot,
+            queryFn: () => getWeeklySnapshot(),
+        }),
     ])
 
     return (
@@ -66,5 +81,13 @@ export default async function DashboardPage() {
                 <DashboardView />
             </Suspense>
         </HydrationBoundary>
+    )
+}
+
+export default function DashboardPage() {
+    return (
+        <Suspense fallback={<DashboardFallback />}>
+            <DashboardHydratedContent />
+        </Suspense>
     )
 }

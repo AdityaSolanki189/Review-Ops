@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import { useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -7,11 +8,6 @@ import { useSearchParams } from 'next/navigation'
 import { AlertTriangle, BarChart3, Inbox, Info, MessageSquare, Star, ThumbsDown } from 'lucide-react'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import { NeedsAttentionCard } from '@/components/dashboard/needs-attention-card'
-import {
-    PeriodRatingTrendChart,
-    RatingBandDistributionChart,
-    SentimentPieChart,
-} from '@/components/dashboard/dashboard-charts'
 import {
     EmptyState,
     FreshnessStrip,
@@ -21,7 +17,6 @@ import {
     StaleDataBanner,
 } from '@/components/dashboard/dashboard-parts'
 import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
-import { IssueExplainerSheet } from '@/components/dashboard/issue-explainer-sheet'
 import { SyncHealthList } from '@/components/dashboard/sync-health-list'
 import { WeeklySnapshotCard } from '@/components/dashboard/weekly-snapshot-card'
 import { QueryState, RefreshButton } from '@/components/query-state'
@@ -54,6 +49,26 @@ import {
 } from '@/lib/queries/dashboard.queries'
 import { usePropertiesListQuery } from '@/lib/queries/properties.queries'
 import { cn } from '@/lib/utils/utils'
+
+const PeriodRatingTrendChart = dynamic(
+    () => import('@/components/dashboard/dashboard-charts').then((module) => module.PeriodRatingTrendChart),
+    { ssr: false, loading: () => <Skeleton className="h-[280px] w-full" /> },
+)
+
+const RatingBandDistributionChart = dynamic(
+    () => import('@/components/dashboard/dashboard-charts').then((module) => module.RatingBandDistributionChart),
+    { ssr: false, loading: () => <Skeleton className="h-[240px] w-full" /> },
+)
+
+const SentimentPieChart = dynamic(
+    () => import('@/components/dashboard/dashboard-charts').then((module) => module.SentimentPieChart),
+    { ssr: false, loading: () => <Skeleton className="h-[240px] w-full" /> },
+)
+
+const IssueExplainerSheet = dynamic(
+    () => import('@/components/dashboard/issue-explainer-sheet').then((module) => module.IssueExplainerSheet),
+    { ssr: false },
+)
 
 function KpiSkeleton() {
     return (
@@ -88,7 +103,9 @@ export function DashboardView() {
     const seriesQuery = useDashboardSeriesQuery(scope)
     const recentReviewsQuery = useDashboardRecentReviewsQuery()
     const syncHealthQuery = useSyncHealthQuery()
-    const briefingQuery = usePortfolioBriefingQuery(scope)
+    const briefingQuery = usePortfolioBriefingQuery(scope, {
+        enabled: Boolean(overviewQuery.data && issuesQuery.data),
+    })
     const weeklySnapshotQuery = useWeeklySnapshotQuery()
     const invalidateCache = useInvalidateCache()
 

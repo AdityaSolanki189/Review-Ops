@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { and, asc, count, desc, eq, gte, lt, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { properties, reviews, reviewTopics } from '@/db/schema'
@@ -29,7 +30,7 @@ function scopeCacheKey(name: string, scope: ResolvedAnalyticsScope): string {
     return `${name}:${scope.propertySlug ?? 'all'}:${scope.public.from}:${scope.public.to}`
 }
 
-async function getPeriodSummary(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+async function loadPeriodSummary(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
     const [summary] = await db
         .select({
             averageRating: sql<number | null>`avg(${reviews.ratingNumeric})`,
@@ -58,7 +59,9 @@ async function getPeriodSummary(scope: ResolvedAnalyticsScope, period: Analytics
     }
 }
 
-async function getClassifiedReviewCount(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod): Promise<number> {
+const getPeriodSummary = cache(loadPeriodSummary)
+
+async function loadClassifiedReviewCount(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod): Promise<number> {
     const [row] = await db
         .select({ count: sql<number>`count(distinct ${reviewTopics.reviewId})` })
         .from(reviews)
@@ -67,6 +70,8 @@ async function getClassifiedReviewCount(scope: ResolvedAnalyticsScope, period: A
         .where(scopeConditions(scope, period))
     return number(row?.count)
 }
+
+const getClassifiedReviewCount = cache(loadClassifiedReviewCount)
 
 export interface SentimentMixRow {
     positive: number
@@ -154,7 +159,7 @@ async function getPositiveTopics(scope: ResolvedAnalyticsScope, period: Analytic
     return getTopicsBySentiment(scope, period, 'positive')
 }
 
-async function getPropertySummaries(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+async function loadPropertySummaries(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
     const rows = await db
         .select({
             slug: properties.slug,
@@ -177,13 +182,17 @@ async function getPropertySummaries(scope: ResolvedAnalyticsScope, period: Analy
     }))
 }
 
-async function getScopedProperties(scope: ResolvedAnalyticsScope) {
+const getPropertySummaries = cache(loadPropertySummaries)
+
+async function loadScopedProperties(scope: ResolvedAnalyticsScope) {
     return db
         .select({ slug: properties.slug, name: properties.name })
         .from(properties)
         .where(scope.propertySlug ? eq(properties.slug, scope.propertySlug) : undefined)
         .orderBy(asc(properties.name))
 }
+
+const getScopedProperties = cache(loadScopedProperties)
 
 export async function getDashboardOverview(scope: ResolvedAnalyticsScope) {
     return cachedQuery(scopeCacheKey('dashboard:overview', scope), DASHBOARD_CACHE_TTL, async () => {
@@ -288,7 +297,7 @@ export async function getDashboardIssues(scope: ResolvedAnalyticsScope) {
     })
 }
 
-async function getPropertyClassificationCounts(scope: ResolvedAnalyticsScope) {
+async function loadPropertyClassificationCounts(scope: ResolvedAnalyticsScope) {
     const rows = await db
         .select({
             slug: properties.slug,
@@ -302,6 +311,8 @@ async function getPropertyClassificationCounts(scope: ResolvedAnalyticsScope) {
 
     return rows.map((row) => ({ ...row, reviewCount: number(row.reviewCount) }))
 }
+
+const getPropertyClassificationCounts = cache(loadPropertyClassificationCounts)
 
 export async function getDashboardTopicMatrix(scope: ResolvedAnalyticsScope) {
     return cachedQuery(scopeCacheKey('dashboard:topic-matrix', scope), DASHBOARD_CACHE_TTL, async () => {

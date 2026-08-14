@@ -1,9 +1,9 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { ThumbsDown, Star } from 'lucide-react'
-import { SentimentPieChart } from '@/components/dashboard/dashboard-charts'
 import { SignalBar } from '@/components/dashboard/dashboard-parts'
 import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
 import { PageIntro } from '@/components/layout/page-intro'
@@ -15,6 +15,11 @@ import { buildScopeQueryString, resolveScopeFromSearchParams, shortPropertyName 
 import { formatMetricValue } from '@/lib/dashboard-status'
 import { useDashboardOverviewQuery } from '@/lib/queries/dashboard.queries'
 import { usePropertiesListQuery } from '@/lib/queries/properties.queries'
+
+const SentimentPieChart = dynamic(
+    () => import('@/components/dashboard/dashboard-charts').then((module) => module.SentimentPieChart),
+    { ssr: false, loading: () => <Skeleton className="h-[180px] w-full" /> },
+)
 
 function formatActivityDelta(delta: number | null): string | null {
     if (delta === null) return null

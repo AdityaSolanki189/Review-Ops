@@ -108,11 +108,11 @@ export function ReviewsView() {
           }
         : null
 
+    const isSearchMode = Boolean(searchQuery)
     const propertiesQuery = usePropertiesListQuery()
-    const reviewsQuery = useReviewsQuery(filterKey)
+    const reviewsQuery = useReviewsQuery(filterKey, { enabled: !isSearchMode })
     const searchQueryResult = useReviewSearchQuery(searchFilters)
 
-    const isSearchMode = Boolean(searchQuery)
     const isLoading = propertiesQuery.isLoading || (isSearchMode ? searchQueryResult.isLoading : reviewsQuery.isLoading)
     const isError = propertiesQuery.isError || (isSearchMode ? searchQueryResult.isError : reviewsQuery.isError)
     const error = propertiesQuery.error ?? (isSearchMode ? searchQueryResult.error : reviewsQuery.error)
