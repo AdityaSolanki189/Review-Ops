@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { useSyncHealthQuery } from '@/lib/queries/dashboard.queries'
 
 export function SyncStatusIndicator() {
@@ -10,9 +10,9 @@ export function SyncStatusIndicator() {
 
     if (isLoading || !data) {
         return (
-            <Badge variant="outline" className="hidden font-normal sm:inline-flex">
-                Sync status
-            </Badge>
+            <Button variant="outline" size="icon" className="size-9 shrink-0" disabled aria-label="Sync status loading">
+                <AlertCircle className="size-4 text-muted-foreground" />
+            </Button>
         )
     }
 
@@ -20,22 +20,19 @@ export function SyncStatusIndicator() {
 
     if (needsAttention) {
         return (
-            <Link href="/sync">
-                <Badge
-                    variant="outline"
-                    className="hidden gap-1 font-normal text-amber-700 dark:text-amber-300 sm:inline-flex"
-                >
-                    <AlertCircle className="size-3.5" />
-                    Sync needs attention
-                </Badge>
-            </Link>
+            <Button variant="outline" size="icon" className="size-9 shrink-0" asChild>
+                <Link href="/sync" aria-label="Sync needs attention">
+                    <AlertCircle className="size-4 text-warning-foreground" />
+                </Link>
+            </Button>
         )
     }
 
     return (
-        <Badge variant="outline" className="hidden gap-1 font-normal text-muted-foreground sm:inline-flex">
-            <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-            Sync healthy
-        </Badge>
+        <Button variant="outline" size="icon" className="size-9 shrink-0" asChild>
+            <Link href="/sync" aria-label="Sync healthy">
+                <CheckCircle2 className="size-4 text-success" />
+            </Link>
+        </Button>
     )
 }

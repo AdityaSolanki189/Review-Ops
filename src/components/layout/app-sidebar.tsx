@@ -3,8 +3,7 @@
 import type { Route } from 'next'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart3, Building2, RefreshCw, Star } from 'lucide-react'
-import { clientConfig } from '@/lib/config/client'
+import { BarChart3, Building2, ChevronsRight, RefreshCw, Star } from 'lucide-react'
 import {
     Sidebar,
     SidebarContent,
@@ -14,10 +13,14 @@ import {
     SidebarGroupLabel,
     SidebarHeader,
     SidebarMenu,
+    SidebarMenuBadge,
     SidebarMenuButton,
     SidebarMenuItem,
     SidebarRail,
+    useSidebar,
 } from '@/components/ui/sidebar'
+import { clientConfig } from '@/lib/config/client'
+import { useSyncHealthQuery } from '@/lib/queries/dashboard.queries'
 
 const navItems: Array<{ href: Route; label: string; icon: typeof BarChart3 }> = [
     { href: '/', label: 'Dashboard', icon: BarChart3 },
@@ -26,8 +29,35 @@ const navItems: Array<{ href: Route; label: string; icon: typeof BarChart3 }> = 
     { href: '/sync', label: 'Sync', icon: RefreshCw },
 ]
 
+function SidebarCollapseToggle() {
+    const { state, toggleSidebar } = useSidebar()
+    const expanded = state === 'expanded'
+
+    return (
+        <button
+            type="button"
+            onClick={toggleSidebar}
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+            aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+        >
+            <span className="flex size-8 shrink-0 items-center justify-center">
+                <ChevronsRight
+                    className={`size-4 text-muted-foreground transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none ${expanded ? 'rotate-180' : ''}`}
+                    aria-hidden
+                />
+            </span>
+            <span className="truncate group-data-[collapsible=icon]:hidden">{expanded ? 'Hide' : 'Show'}</span>
+        </button>
+    )
+}
+
 export function AppSidebar() {
     const pathname = usePathname()
+    const { data: syncHealth } = useSyncHealthQuery()
+
+    const syncIssueCount =
+        syncHealth?.latestRuns.filter((entry) => entry.run?.status === 'blocked' || entry.run?.status === 'failed')
+            .length ?? 0
 
     return (
         <Sidebar collapsible="icon">
@@ -56,6 +86,7 @@ export function AppSidebar() {
                             {navItems.map((item) => {
                                 const Icon = item.icon
                                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
+                                const showSyncBadge = item.href === '/sync' && syncIssueCount > 0
                                 return (
                                     <SidebarMenuItem key={item.href}>
                                         <SidebarMenuButton asChild isActive={active} tooltip={item.label}>
@@ -64,6 +95,11 @@ export function AppSidebar() {
                                                 <span>{item.label}</span>
                                             </Link>
                                         </SidebarMenuButton>
+                                        {showSyncBadge ? (
+                                            <SidebarMenuBadge className="bg-destructive text-destructive-foreground">
+                                                {syncIssueCount}
+                                            </SidebarMenuBadge>
+                                        ) : null}
                                     </SidebarMenuItem>
                                 )
                             })}
@@ -72,6 +108,7 @@ export function AppSidebar() {
                 </SidebarGroup>
             </SidebarContent>
             <SidebarFooter className="border-t border-sidebar-border">
+                <SidebarCollapseToggle />
                 <p className="px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
                     Sydney properties
                 </p>
