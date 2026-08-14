@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import type { Route } from 'next'
 import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { EmptyState, ReviewCard } from '@/components/dashboard/dashboard-parts'
@@ -128,11 +129,11 @@ export function ReviewsView() {
     const activeFilters = [...searchParams.entries()].filter(
         ([key, value]) => value && key !== 'cursor' && !(key === 'sort' && value === 'newest'),
     )
-    const withoutFilter = (key: string) => {
+    const withoutFilter = (key: string): Route => {
         const next = new URLSearchParams(searchParams)
         next.delete(key)
         const query = next.toString()
-        return query ? `/reviews?${query}` : '/reviews'
+        return (query ? `/reviews?${query}` : '/reviews') as Route
     }
 
     const refetchAll = () => {
@@ -161,7 +162,7 @@ export function ReviewsView() {
                             asChild
                             className="min-h-11 h-auto whitespace-normal text-left"
                         >
-                            <Link href={`/reviews?${next.toString()}`}>{example}</Link>
+                            <Link href={`/reviews?${next.toString()}` as Route}>{example}</Link>
                         </Button>
                     )
                 })}

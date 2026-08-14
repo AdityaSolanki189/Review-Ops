@@ -9,6 +9,9 @@ export const PERIOD_PRESETS = [
     { label: '365 days', days: 365 },
 ] as const
 
+/** Earliest date supported for all-time analytics scope */
+export const ALL_TIME_FROM = '2018-01-01'
+
 function addCalendarDays(value: string, amount: number): string {
     const parts = value.split('-').map(Number)
     const year = parts[0] ?? 0
@@ -28,6 +31,25 @@ function formatSydneyDate(date: Date): string {
     }).formatToParts(date)
     const value = Object.fromEntries(parts.map((part) => [part.type, part.value]))
     return `${value.year}-${value.month}-${value.day}`
+}
+
+export function sydneyToday(now = new Date()): string {
+    return formatSydneyDate(now)
+}
+
+export function isAllTimeScope(scope: AnalyticsScope, now = new Date()): boolean {
+    return scope.from === ALL_TIME_FROM && scope.to === sydneyToday(now)
+}
+
+export function isPresetScope(scope: AnalyticsScope, now = new Date()): boolean {
+    const today = sydneyToday(now)
+    if (scope.to !== today) return false
+    const days = scopePeriodDays(scope)
+    return PERIOD_PRESETS.some((preset) => preset.days === days)
+}
+
+export function isCustomScope(scope: AnalyticsScope, now = new Date()): boolean {
+    return !isAllTimeScope(scope, now) && !isPresetScope(scope, now)
 }
 
 export function defaultAnalyticsScope(now = new Date()): AnalyticsScope {
@@ -51,7 +73,14 @@ export function scopePeriodDays(scope: AnalyticsScope): number {
     return Math.round((to - from) / 86_400_000)
 }
 
-export function scopeComparisonLabel(scope: AnalyticsScope): string {
+export function scopeComparisonLabel(scope: AnalyticsScope, now = new Date()): string {
+    if (isAllTimeScope(scope, now)) return 'All time'
+    if (isCustomScope(scope, now)) {
+        const from = new Date(`${scope.from}T00:00:00`)
+        const to = new Date(`${scope.to}T00:00:00`)
+        const fmt = (d: Date) => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+        return `${fmt(from)} – ${fmt(to)} vs previous period`
+    }
     const days = scopePeriodDays(scope)
     if (days === 7) return '7 days vs previous 7 days'
     if (days === 30) return '30 days vs previous 30 days'
@@ -89,6 +118,43 @@ export function buildScopePreset(scope: AnalyticsScope, days: number, now = new 
         compare: 'previous-period',
         timezone: ANALYTICS_TIMEZONE,
     }
+}
+
+export function buildAllTimeScope(scope: AnalyticsScope, now = new Date()): AnalyticsScope {
+    const today = formatSydneyDate(now)
+    return {
+        ...scope,
+        propertySlug: scope.propertySlug,
+        from: ALL_TIME_FROM,
+        to: today,
+        compare: 'previous-period',
+        timezone: ANALYTICS_TIMEZONE,
+    }
+}
+
+export function buildCustomScope(scope: AnalyticsScope, from: string, to: string): AnalyticsScope {
+    return {
+        ...scope,
+        propertySlug: scope.propertySlug,
+        from,
+        to,
+        compare: 'previous-period',
+        timezone: ANALYTICS_TIMEZONE,
+    }
+}
+
+export function isoDateFromDate(date: Date): string {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
+export function formatCustomRangeLabel(scope: AnalyticsScope): string {
+    const from = new Date(`${scope.from}T00:00:00`)
+    const to = new Date(`${scope.to}T00:00:00`)
+    const fmt = (d: Date) => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+    return `${fmt(from)} – ${fmt(to)}`
 }
 
 export function buildReviewsDrillDownUrl(input: {

@@ -163,7 +163,7 @@ export function ReviewDetailSheet({
                     side === 'bottom' && 'max-h-[90dvh] rounded-t-xl',
                 )}
             >
-                <SheetHeader className="shrink-0 border-b px-6 py-5 pr-12 text-left">
+                <SheetHeader className="shrink-0 border-b px-6 py-6 pr-12 text-left">
                     <SheetTitle className="text-base leading-snug">{review.title ?? 'Guest review'}</SheetTitle>
                     <SheetDescription>
                         {review.property.name} · {format(new Date(review.reviewDate), 'dd MMM yyyy')} ·{' '}
@@ -171,7 +171,7 @@ export function ReviewDetailSheet({
                     </SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+                <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
                     <div className="grid gap-4 text-sm sm:grid-cols-2">
                         {review.reviewerCountry ? (
                             <div className="space-y-1">

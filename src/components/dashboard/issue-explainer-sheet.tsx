@@ -81,14 +81,14 @@ export function IssueExplainerSheet({ open, onOpenChange, scope, propertySlug, t
                     side === 'bottom' && 'max-h-[90dvh] rounded-t-xl',
                 )}
             >
-                <SheetHeader className="shrink-0 border-b px-6 py-5 pr-12 text-left">
+                <SheetHeader className="shrink-0 border-b px-6 py-6 pr-12 text-left">
                     <SheetTitle className="text-base leading-snug">
                         {formatTopicLabel(topic)} at {propertyName}
                     </SheetTitle>
                     <SheetDescription>AI-assisted breakdown with verifiable guest excerpts below.</SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 overflow-y-auto px-6 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+                <div className="flex-1 overflow-y-auto px-6 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
                     <QueryState
                         isLoading={isPending}
                         isError={isError}

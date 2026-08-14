@@ -71,6 +71,7 @@ export function ReviewCard({
                 'overflow-hidden border-l-[3px]',
                 toneStyle.border,
                 compact && 'gap-0 py-0 shadow-none',
+                !compact && 'py-0',
                 interactive && 'cursor-pointer min-h-11',
                 interactive &&
                     'transition-[transform,border-color] duration-150 ease-[var(--ease-out)] [@media(hover:hover)]:hover:border-primary/30 [@media(hover:hover)]:active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100',
@@ -197,7 +198,7 @@ export function MetricCard({
 
     return (
         <Card className="transition-shadow duration-200 ease-[var(--ease-out)] hover:shadow-sm motion-reduce:transition-none">
-            <CardContent className="space-y-4 pt-6">
+            <CardContent className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
                     {Icon ? (
                         <div className={cn('rounded-lg p-2', toneChipClass[tone])}>

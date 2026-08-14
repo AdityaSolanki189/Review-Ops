@@ -69,7 +69,7 @@ export function SyncView() {
                             <div className="space-y-3 md:hidden">
                                 {query.data.map(({ run, property }) => (
                                     <Card key={run.id}>
-                                        <CardContent className="space-y-3 p-4">
+                                        <CardContent className="space-y-3">
                                             <div className="flex items-start justify-between gap-2">
                                                 <p className="font-medium">{shortPropertyName(property.name)}</p>
                                                 <SyncStatusBadge status={run.status} />
