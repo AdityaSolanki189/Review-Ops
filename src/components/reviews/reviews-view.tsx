@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ReviewCard } from '@/components/dashboard/dashboard-parts'
 import { QueryState } from '@/components/query-state'
@@ -18,21 +19,27 @@ export function ReviewsView() {
         property: searchParams.get('property') ?? undefined,
         minRating: searchParams.get('minRating') ?? undefined,
         maxRating: searchParams.get('maxRating') ?? undefined,
+        ratingBand: searchParams.get('ratingBand') ?? undefined,
         topic: searchParams.get('topic') ?? undefined,
         sentiment: searchParams.get('sentiment') ?? undefined,
         from: searchParams.get('from') ?? undefined,
         to: searchParams.get('to') ?? undefined,
+        sort: searchParams.get('sort') ?? undefined,
+        representative: searchParams.get('representative') ?? undefined,
     }
 
     const filterKey = {
         propertySlug: params.property,
         minRating: params.minRating ? Number(params.minRating) : undefined,
         maxRating: params.maxRating ? Number(params.maxRating) : undefined,
+        ratingBand: params.ratingBand as 'low' | 'mid' | 'high' | undefined,
         topic: params.topic as ReviewTopicKey | undefined,
         sentiment: params.sentiment as ReviewSentiment | undefined,
         from: params.from ? new Date(params.from) : undefined,
         to: params.to ? new Date(params.to) : undefined,
-        limit: 50,
+        sort: (params.sort as 'newest' | 'oldest' | 'rating-high' | 'rating-low' | undefined) ?? 'newest',
+        representative: params.representative === 'true',
+        limit: 20,
     }
 
     const propertiesQuery = usePropertiesListQuery()
@@ -41,7 +48,20 @@ export function ReviewsView() {
     const isLoading = propertiesQuery.isLoading || reviewsQuery.isLoading
     const isError = propertiesQuery.isError || reviewsQuery.isError
     const error = propertiesQuery.error ?? reviewsQuery.error
-    const reviews = reviewsQuery.data?.pages.flatMap((page) => page.items) ?? []
+    const [pagination, setPagination] = useState({ filterSearch: '', pageIndex: 0 })
+    const filterSearch = searchParams.toString()
+    const pageIndex = pagination.filterSearch === filterSearch ? pagination.pageIndex : 0
+    const pages = reviewsQuery.data?.pages ?? []
+    const reviews = pages[pageIndex]?.items ?? []
+    const activeFilters = [...searchParams.entries()].filter(
+        ([key, value]) => value && key !== 'cursor' && !(key === 'sort' && value === 'newest'),
+    )
+    const withoutFilter = (key: string) => {
+        const next = new URLSearchParams(searchParams)
+        next.delete(key)
+        const query = next.toString()
+        return query ? `/reviews?${query}` : '/reviews'
+    }
 
     const refetchAll = () => {
         void propertiesQuery.refetch()
@@ -55,6 +75,20 @@ export function ReviewsView() {
             </div>
 
             {propertiesQuery.data ? <ReviewFiltersForm properties={propertiesQuery.data} params={params} /> : null}
+
+            {activeFilters.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Active filters:</span>
+                    {activeFilters.map(([key, value]) => (
+                        <a key={key} href={withoutFilter(key)} className="rounded-full border px-2 py-1 hover:bg-muted">
+                            {key}: {value} ×
+                        </a>
+                    ))}
+                    <a href="/reviews" className="text-primary underline-offset-4 hover:underline">
+                        Clear all
+                    </a>
+                </div>
+            ) : null}
 
             <QueryState
                 isLoading={isLoading}
@@ -93,14 +127,34 @@ export function ReviewsView() {
                             )}
                         </div>
 
-                        {reviewsQuery.hasNextPage ? (
-                            <div className="flex justify-center">
+                        {pages.length > 0 ? (
+                            <div className="flex justify-center gap-2">
                                 <Button
                                     variant="outline"
-                                    disabled={reviewsQuery.isFetchingNextPage}
-                                    onClick={() => reviewsQuery.fetchNextPage()}
+                                    disabled={pageIndex === 0 || reviewsQuery.isFetchingNextPage}
+                                    onClick={() =>
+                                        setPagination({ filterSearch, pageIndex: Math.max(0, pageIndex - 1) })
+                                    }
                                 >
-                                    {reviewsQuery.isFetchingNextPage ? 'Loading...' : 'Load more reviews'}
+                                    Previous page
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    disabled={
+                                        reviewsQuery.isFetchingNextPage ||
+                                        (!pages[pageIndex + 1] && !reviewsQuery.hasNextPage)
+                                    }
+                                    onClick={() => {
+                                        if (pages[pageIndex + 1]) {
+                                            setPagination({ filterSearch, pageIndex: pageIndex + 1 })
+                                            return
+                                        }
+                                        void reviewsQuery
+                                            .fetchNextPage()
+                                            .then(() => setPagination({ filterSearch, pageIndex: pageIndex + 1 }))
+                                    }}
+                                >
+                                    {reviewsQuery.isFetchingNextPage ? 'Loading...' : 'Next page'}
                                 </Button>
                             </div>
                         ) : null}

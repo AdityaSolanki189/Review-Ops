@@ -1,24 +1,16 @@
 import { NextResponse } from 'next/server'
-import { getRecentReviews } from '@/db/queries/analytics'
-import type { ReviewSentiment, ReviewTopicKey } from '@/lib/classification/topics'
+import { getRecentReviews, type ReviewFilters } from '@/db/queries/analytics'
+import { parseReviewFilters, type ParsedReviewFilters } from '@/lib/reviews'
 
-export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url)
+type ReviewsFetcher = (filters: ReviewFilters & ParsedReviewFilters) => Promise<unknown>
 
-    const from = searchParams.get('from')
-    const to = searchParams.get('to')
+export function createReviewsRoute(fetchReviews: ReviewsFetcher = getRecentReviews) {
+    return async function GET(request: Request) {
+        const parsed = parseReviewFilters(new URL(request.url).searchParams)
+        if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
-    const data = await getRecentReviews({
-        propertySlug: searchParams.get('property') ?? undefined,
-        minRating: searchParams.get('minRating') ? Number(searchParams.get('minRating')) : undefined,
-        maxRating: searchParams.get('maxRating') ? Number(searchParams.get('maxRating')) : undefined,
-        topic: (searchParams.get('topic') as ReviewTopicKey | null) ?? undefined,
-        sentiment: (searchParams.get('sentiment') as ReviewSentiment | null) ?? undefined,
-        from: from ? new Date(from) : undefined,
-        to: to ? new Date(to) : undefined,
-        cursor: searchParams.get('cursor') ?? undefined,
-        limit: searchParams.get('limit') ? Number(searchParams.get('limit')) : 50,
-    })
-
-    return NextResponse.json(data)
+        return NextResponse.json(await fetchReviews(parsed.data))
+    }
 }
+
+export const GET = createReviewsRoute()

@@ -14,10 +14,13 @@ function buildReviewsSearchParams(filters: ReviewFilters): string {
     if (filters.maxRating !== undefined) params.set('maxRating', String(filters.maxRating))
     if (filters.topic) params.set('topic', filters.topic)
     if (filters.sentiment) params.set('sentiment', filters.sentiment)
-    if (filters.from) params.set('from', filters.from.toISOString())
-    if (filters.to) params.set('to', filters.to.toISOString())
+    if (filters.ratingBand) params.set('ratingBand', filters.ratingBand)
+    if (filters.from) params.set('from', filters.from.toISOString().slice(0, 10))
+    if (filters.to) params.set('to', filters.to.toISOString().slice(0, 10))
     if (filters.cursor) params.set('cursor', filters.cursor)
     if (filters.limit !== undefined) params.set('limit', String(filters.limit))
+    if (filters.sort) params.set('sort', filters.sort)
+    if (filters.representative) params.set('representative', 'true')
 
     const query = params.toString()
     return query ? `?${query}` : ''

@@ -139,6 +139,7 @@ export interface ScrapePageHandlerResult {
     stop: boolean
     consecutiveKnown: number
     pageInserted: number
+    pageUpdated: number
     dbCountAfterPage: number
 }
 
@@ -158,6 +159,7 @@ export interface ScrapeGraphqlResult {
     reviewsCount: number
     reviewsFound: number
     reviewsInserted: number
+    reviewsUpdated: number
     newestReviewDate: Date | null
     pagesFetched: number
     lastSkip: number
@@ -180,6 +182,7 @@ export async function scrapePropertyReviews(
 
     let reviewsFound = 0
     let reviewsInserted = 0
+    let reviewsUpdated = 0
     let newestReviewDate: Date | null = null
     let pagesFetched = 0
     let lastSkip = 0
@@ -199,6 +202,7 @@ export async function scrapePropertyReviews(
                 reviewsCount: 0,
                 reviewsFound: 0,
                 reviewsInserted: 0,
+                reviewsUpdated: 0,
                 newestReviewDate: null,
                 pagesFetched: 0,
                 lastSkip: options.storedBackfillSkip,
@@ -266,6 +270,7 @@ export async function scrapePropertyReviews(
             })
             consecutiveKnown = handlerResult.consecutiveKnown
             reviewsInserted += handlerResult.pageInserted
+            reviewsUpdated += handlerResult.pageUpdated
             dbCount = handlerResult.dbCountAfterPage
 
             console.log(
@@ -322,6 +327,7 @@ export async function scrapePropertyReviews(
             reviewsCount,
             reviewsFound,
             reviewsInserted,
+            reviewsUpdated,
             newestReviewDate,
             pagesFetched,
             lastSkip: skip + pageSize,
@@ -336,6 +342,7 @@ export async function scrapePropertyReviews(
                 reviewsCount: 0,
                 reviewsFound,
                 reviewsInserted,
+                reviewsUpdated,
                 newestReviewDate,
                 pagesFetched,
                 lastSkip,
@@ -351,6 +358,7 @@ export async function scrapePropertyReviews(
                 reviewsCount,
                 reviewsFound,
                 reviewsInserted,
+                reviewsUpdated,
                 newestReviewDate,
                 pagesFetched,
                 lastSkip,

@@ -12,10 +12,13 @@ interface ReviewFiltersFormProps {
         property?: string
         minRating?: string
         maxRating?: string
+        ratingBand?: string
         topic?: string
         sentiment?: string
         from?: string
         to?: string
+        sort?: string
+        representative?: string
     }
     onSubmit?: () => void
 }
@@ -24,10 +27,12 @@ export function ReviewFiltersForm({ properties, params, onSubmit }: ReviewFilter
     const propertyId = useId()
     const minRatingId = useId()
     const maxRatingId = useId()
+    const ratingBandId = useId()
     const topicId = useId()
     const sentimentId = useId()
     const fromId = useId()
     const toId = useId()
+    const sortId = useId()
     const topicOptions = Object.keys(TOPIC_KEYWORDS) as ReviewTopicKey[]
 
     return (
@@ -36,6 +41,17 @@ export function ReviewFiltersForm({ properties, params, onSubmit }: ReviewFilter
             className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-3 xl:grid-cols-4"
             onSubmit={onSubmit}
         >
+            <div className="space-y-2">
+                <label htmlFor={ratingBandId} className="text-sm font-medium">
+                    Rating band
+                </label>
+                <Select id={ratingBandId} name="ratingBand" defaultValue={params.ratingBand ?? ''}>
+                    <option value="">All ratings</option>
+                    <option value="low">Low (≤5)</option>
+                    <option value="mid">Mid (&gt;5 and &lt;8)</option>
+                    <option value="high">High (≥8)</option>
+                </Select>
+            </div>
             <div className="space-y-2">
                 <label htmlFor={propertyId} className="text-sm font-medium">
                     Property
@@ -49,6 +65,26 @@ export function ReviewFiltersForm({ properties, params, onSubmit }: ReviewFilter
                     ))}
                 </Select>
             </div>
+            <div className="space-y-2">
+                <label htmlFor={sortId} className="text-sm font-medium">
+                    Sort
+                </label>
+                <Select id={sortId} name="sort" defaultValue={params.sort ?? 'newest'}>
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="rating-high">Highest rating</option>
+                    <option value="rating-low">Lowest rating</option>
+                </Select>
+            </div>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm font-medium">
+                <input
+                    name="representative"
+                    type="checkbox"
+                    value="true"
+                    defaultChecked={params.representative === 'true'}
+                />
+                Representative evidence first
+            </label>
             <div className="space-y-2">
                 <label htmlFor={minRatingId} className="text-sm font-medium">
                     Min rating

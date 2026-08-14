@@ -1,4 +1,4 @@
-import { index, jsonb, numeric, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { index, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 import { timestamps } from '@/db/columns.helpers'
 
@@ -46,6 +46,9 @@ export const reviews = pgTable(
         index('reviews_property_id_review_date_idx').on(table.propertyId, table.reviewDate.desc()),
         index('reviews_review_date_idx').on(table.reviewDate.desc()),
         index('reviews_property_rating_date_idx').on(table.propertyId, table.ratingNumeric, table.reviewDate.desc()),
+        uniqueIndex('reviews_source_external_id_unique')
+            .on(table.source, table.externalId)
+            .where(sql`${table.externalId} is not null`),
     ],
 )
 

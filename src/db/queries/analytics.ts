@@ -1,9 +1,10 @@
-import { and, asc, count, desc, eq, gte, inArray, lt, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, inArray, lt, lte, or, sql } from 'drizzle-orm'
 import { cache } from 'react'
 import { db } from '@/db'
 import { properties, reviews, reviewTopics, scrapeRuns } from '@/db/schema'
 import { cachedQuery } from '@/lib/cache/cached'
 import type { ReviewSentiment, ReviewTopicKey } from '@/lib/classification/topics'
+import { decodeReviewCursor, encodeReviewCursor, type RatingBand, type ReviewSort } from '@/lib/reviews'
 
 const CACHE_TTL = {
     properties: 3600,
@@ -37,26 +38,16 @@ function hashReviewFilters(filters: ReviewFilters): string {
         propertySlug: filters.propertySlug ?? '',
         minRating: filters.minRating ?? '',
         maxRating: filters.maxRating ?? '',
+        ratingBand: filters.ratingBand ?? '',
         topic: filters.topic ?? '',
         sentiment: filters.sentiment ?? '',
         from: filters.from?.toISOString() ?? '',
         to: filters.to?.toISOString() ?? '',
         limit: filters.limit ?? 20,
         cursor: filters.cursor ?? '',
+        sort: filters.sort ?? 'newest',
+        representative: filters.representative ?? false,
     })
-}
-
-function encodeCursor(reviewDate: Date, id: string): string {
-    return `${reviewDate.toISOString()}|${id}`
-}
-
-function decodeCursor(cursor: string): { reviewDate: Date; id: string } | null {
-    const separatorIndex = cursor.indexOf('|')
-    if (separatorIndex === -1) return null
-    const reviewDate = new Date(cursor.slice(0, separatorIndex))
-    const id = cursor.slice(separatorIndex + 1)
-    if (Number.isNaN(reviewDate.getTime()) || !id) return null
-    return { reviewDate, id }
 }
 
 export type EnrichedReview = Awaited<ReturnType<typeof loadRecentReviews>>['items'][number]
@@ -228,10 +219,13 @@ export interface ReviewFilters {
     maxRating?: number
     topic?: ReviewTopicKey
     sentiment?: ReviewSentiment
+    ratingBand?: RatingBand
     from?: Date
     to?: Date
     limit?: number
     cursor?: string
+    sort?: ReviewSort
+    representative?: boolean
 }
 
 export interface ReviewsPage {
@@ -242,6 +236,7 @@ export interface ReviewsPage {
         }
     >
     nextCursor: string | null
+    filters: ReviewFilters
 }
 
 async function buildReviewConditions(filters: ReviewFilters) {
@@ -264,27 +259,84 @@ async function buildReviewConditions(filters: ReviewFilters) {
         conditions.push(lte(reviews.ratingNumeric, String(filters.maxRating)))
     }
 
+    if (filters.ratingBand === 'low') {
+        conditions.push(lte(reviews.ratingNumeric, '5'))
+    } else if (filters.ratingBand === 'mid') {
+        conditions.push(and(gt(reviews.ratingNumeric, '5'), lt(reviews.ratingNumeric, '8')))
+    } else if (filters.ratingBand === 'high') {
+        conditions.push(gte(reviews.ratingNumeric, '8'))
+    }
+
     if (filters.from) {
         conditions.push(gte(reviews.reviewDate, filters.from))
     }
 
     if (filters.to) {
-        conditions.push(lte(reviews.reviewDate, filters.to))
+        conditions.push(lt(reviews.reviewDate, filters.to))
     }
 
     if (filters.cursor) {
-        const decoded = decodeCursor(filters.cursor)
+        const decoded = decodeReviewCursor(filters.cursor, filters.sort ?? 'newest')
         if (decoded) {
-            conditions.push(
-                or(
-                    lt(reviews.reviewDate, decoded.reviewDate),
-                    and(eq(reviews.reviewDate, decoded.reviewDate), lt(reviews.id, decoded.id)),
-                ),
-            )
+            const standardCursorCondition =
+                decoded.sort === 'newest'
+                    ? or(
+                          lt(reviews.reviewDate, new Date(decoded.value)),
+                          and(eq(reviews.reviewDate, new Date(decoded.value)), lt(reviews.id, decoded.id)),
+                      )
+                    : decoded.sort === 'oldest'
+                      ? or(
+                            gt(reviews.reviewDate, new Date(decoded.value)),
+                            and(eq(reviews.reviewDate, new Date(decoded.value)), gt(reviews.id, decoded.id)),
+                        )
+                      : decoded.sort === 'rating-high'
+                        ? or(
+                              lt(reviews.ratingNumeric, decoded.value),
+                              and(eq(reviews.ratingNumeric, decoded.value), lt(reviews.id, decoded.id)),
+                          )
+                        : or(
+                              gt(reviews.ratingNumeric, decoded.value),
+                              and(eq(reviews.ratingNumeric, decoded.value), gt(reviews.id, decoded.id)),
+                          )
+
+            if (filters.representative && decoded.rating && decoded.reviewDate) {
+                const rank = getRepresentativeRank(filters)
+                const reviewDate = new Date(decoded.reviewDate)
+                conditions.push(
+                    or(
+                        gt(rank, decoded.rank ?? 0),
+                        and(
+                            eq(rank, decoded.rank ?? 0),
+                            or(
+                                gt(reviews.ratingNumeric, decoded.rating),
+                                and(
+                                    eq(reviews.ratingNumeric, decoded.rating),
+                                    or(
+                                        lt(reviews.reviewDate, reviewDate),
+                                        and(eq(reviews.reviewDate, reviewDate), lt(reviews.id, decoded.id)),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                )
+            } else {
+                conditions.push(standardCursorCondition)
+            }
         }
     }
 
     return conditions
+}
+
+function getRepresentativeRank(filters: ReviewFilters) {
+    const topicCondition = filters.topic ? sql`and "representative_topics"."topic" = ${filters.topic}` : sql``
+    return sql<number>`case when exists (
+        select 1 from "review_topics" as "representative_topics"
+        where "representative_topics"."review_id" = ${reviews.id}
+          and "representative_topics"."sentiment" = 'negative'
+          ${topicCondition}
+    ) then 0 else 1 end`
 }
 
 async function attachTopics(
@@ -312,6 +364,7 @@ async function attachTopics(
 
 async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
     const limit = filters.limit ?? 20
+    const sort = filters.sort ?? 'newest'
     const conditions = await buildReviewConditions(filters)
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
@@ -322,6 +375,19 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
     if (filters.sentiment) {
         topicConditions.push(eq(reviewTopics.sentiment, filters.sentiment))
     }
+
+    const standardOrderBy =
+        sort === 'oldest'
+            ? [asc(reviews.reviewDate), asc(reviews.id)]
+            : sort === 'rating-high'
+              ? [desc(reviews.ratingNumeric), desc(reviews.id)]
+              : sort === 'rating-low'
+                ? [asc(reviews.ratingNumeric), asc(reviews.id)]
+                : [desc(reviews.reviewDate), desc(reviews.id)]
+    const representativeRank = filters.representative ? getRepresentativeRank(filters) : null
+    const orderBy = representativeRank
+        ? [asc(representativeRank), asc(reviews.ratingNumeric), desc(reviews.reviewDate), desc(reviews.id)]
+        : standardOrderBy
 
     const rows =
         topicConditions.length > 0
@@ -334,7 +400,7 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
                   .innerJoin(properties, eq(reviews.propertyId, properties.id))
                   .innerJoin(reviewTopics, eq(reviewTopics.reviewId, reviews.id))
                   .where(whereClause ? and(whereClause, ...topicConditions) : and(...topicConditions))
-                  .orderBy(desc(reviews.reviewDate), desc(reviews.id))
+                  .orderBy(...orderBy)
                   .limit(limit + 1)
             : await db
                   .select({
@@ -344,7 +410,7 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
                   .from(reviews)
                   .innerJoin(properties, eq(reviews.propertyId, properties.id))
                   .where(whereClause)
-                  .orderBy(desc(reviews.reviewDate), desc(reviews.id))
+                  .orderBy(...orderBy)
                   .limit(limit + 1)
 
     const hasMore = rows.length > limit
@@ -354,7 +420,31 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
 
     return {
         items,
-        nextCursor: hasMore && last ? encodeCursor(last.reviewDate, last.id) : null,
+        nextCursor:
+            hasMore && last
+                ? encodeReviewCursor({
+                      sort,
+                      value:
+                          sort === 'rating-high' || sort === 'rating-low'
+                              ? String(last.ratingNumeric)
+                              : last.reviewDate.toISOString(),
+                      id: last.id,
+                      ...(representativeRank
+                          ? {
+                                rank: last.topics.some(
+                                    (topic) =>
+                                        topic.sentiment === 'negative' &&
+                                        (!filters.topic || topic.topic === filters.topic),
+                                )
+                                    ? 0
+                                    : 1,
+                                rating: String(last.ratingNumeric),
+                                reviewDate: last.reviewDate.toISOString(),
+                            }
+                          : {}),
+                  })
+                : null,
+        filters,
     }
 }
 

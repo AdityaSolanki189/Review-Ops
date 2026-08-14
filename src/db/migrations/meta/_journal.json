@@ -29,6 +29,13 @@
       "when": 1786690022270,
       "tag": "0003_indexes_and_insights",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786693577101,
+      "tag": "0004_goofy_maginty",
+      "breakpoints": true
     }
   ]
 }
