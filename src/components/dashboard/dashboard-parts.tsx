@@ -29,6 +29,7 @@ type ReviewCardProps = {
     topics?: Array<{ topic: string; sentiment: string }>
     review?: ReviewListItem
     onSelect?: () => void
+    compact?: boolean
 }
 
 export function ReviewCard({
@@ -40,6 +41,7 @@ export function ReviewCard({
     topics,
     review,
     onSelect,
+    compact = false,
 }: ReviewCardProps) {
     const [open, setOpen] = useState(false)
     const interactive = Boolean(review)
@@ -52,6 +54,7 @@ export function ReviewCard({
     const card = (
         <Card
             className={cn(
+                compact && 'gap-0 py-0 shadow-none',
                 interactive &&
                     'cursor-pointer transition-[transform,border-color] duration-150 ease-[var(--ease-out)] hover:border-primary/30 active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100',
             )}
@@ -77,7 +80,7 @@ export function ReviewCard({
             role={interactive ? 'button' : undefined}
             tabIndex={interactive ? 0 : undefined}
         >
-            <CardContent className="space-y-3 pt-6">
+            <CardContent className={cn('space-y-3', compact ? 'p-4' : 'pt-6')}>
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <p className="font-medium">{propertyName}</p>

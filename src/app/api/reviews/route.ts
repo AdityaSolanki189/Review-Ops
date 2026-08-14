@@ -9,7 +9,13 @@ export function createReviewsRoute(fetchReviews: ReviewsFetcher = getRecentRevie
         const parsed = parseReviewFilters(new URL(request.url).searchParams)
         if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
-        return NextResponse.json(await fetchReviews(parsed.data))
+        try {
+            return NextResponse.json(await fetchReviews(parsed.data))
+        } catch (error) {
+            console.error('[reviews] route loader failed:', error)
+            const message = error instanceof Error ? error.message : 'Failed to load reviews.'
+            return NextResponse.json({ error: message }, { status: 500 })
+        }
     }
 }
 

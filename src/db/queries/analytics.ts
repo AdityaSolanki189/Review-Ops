@@ -555,7 +555,7 @@ function getRepresentativeRank(filters: ReviewFilters) {
         where "representative_topics"."review_id" = ${reviews.id}
           and "representative_topics"."sentiment" = 'negative'
           ${topicCondition}
-    ) then 0 else 1 end`
+    ) then 0 else 1 end`.as('representative_rank')
 }
 
 export async function attachTopics(
@@ -605,7 +605,7 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
                 : [desc(reviews.reviewDate), desc(reviews.id)]
     const representativeRank = filters.representative ? getRepresentativeRank(filters) : null
     const orderBy = representativeRank
-        ? [asc(representativeRank), asc(reviews.ratingNumeric), desc(reviews.reviewDate), desc(reviews.id)]
+        ? [asc(sql`representative_rank`), asc(reviews.ratingNumeric), desc(reviews.reviewDate), desc(reviews.id)]
         : standardOrderBy
 
     const rows =

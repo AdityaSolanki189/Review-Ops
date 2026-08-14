@@ -20,14 +20,20 @@ async function handleExplain(request: Request, propertySlug: string, topicSlug: 
     const parsed = parseAnalyticsScope(new URL(request.url).searchParams)
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
-    const scope = resolveAnalyticsScope(parsed.value).public
-    const explainer = await getIssueExplainer({
-        scope,
-        propertySlug,
-        topic: topicSlug,
-    })
+    try {
+        const scope = resolveAnalyticsScope(parsed.value).public
+        const explainer = await getIssueExplainer({
+            scope,
+            propertySlug,
+            topic: topicSlug,
+        })
 
-    return NextResponse.json(explainer)
+        return NextResponse.json(explainer)
+    } catch (error) {
+        console.error('[issue-explainer] route loader failed:', error)
+        const message = error instanceof Error ? error.message : 'Failed to load issue explainer.'
+        return NextResponse.json({ error: message }, { status: 500 })
+    }
 }
 
 export async function GET(request: Request, context: { params: Promise<{ property: string; topic: string }> }) {

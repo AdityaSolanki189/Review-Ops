@@ -87,4 +87,17 @@ describe('review drill-down contracts', () => {
         assert.equal(response.status, 400)
         assert.equal(calls, 0)
     })
+
+    it('returns a JSON 500 when the reviews loader throws', async () => {
+        const handler = createReviewsRoute(async () => {
+            throw new Error('Database query failed')
+        })
+
+        const response = await handler(
+            new Request('http://localhost/api/reviews?property=central-sydney&representative=true'),
+        )
+
+        assert.equal(response.status, 500)
+        assert.deepEqual(await response.json(), { error: 'Database query failed' })
+    })
 })

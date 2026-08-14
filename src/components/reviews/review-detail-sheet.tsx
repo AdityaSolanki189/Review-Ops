@@ -141,37 +141,37 @@ export function ReviewDetailSheet({
 }) {
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
-                <SheetHeader className="text-left">
-                    <SheetTitle>{review.title ?? 'Guest review'}</SheetTitle>
+            <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+                <SheetHeader className="shrink-0 border-b px-6 py-5 pr-12 text-left">
+                    <SheetTitle className="text-base leading-snug">{review.title ?? 'Guest review'}</SheetTitle>
                     <SheetDescription>
                         {review.property.name} · {format(new Date(review.reviewDate), 'dd MMM yyyy')} ·{' '}
                         <span className="font-mono tabular-nums">{review.rating}/10</span>
                     </SheetDescription>
                 </SheetHeader>
 
-                <div className="mt-6 space-y-6">
-                    <div className="grid gap-3 text-sm sm:grid-cols-2">
+                <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+                    <div className="grid gap-4 text-sm sm:grid-cols-2">
                         {review.reviewerCountry ? (
-                            <div>
+                            <div className="space-y-1">
                                 <p className="text-muted-foreground">Guest country</p>
                                 <p>{review.reviewerCountry}</p>
                             </div>
                         ) : null}
                         {review.travellerType ? (
-                            <div>
+                            <div className="space-y-1">
                                 <p className="text-muted-foreground">Traveller type</p>
                                 <p>{review.travellerType}</p>
                             </div>
                         ) : null}
                         {review.roomType ? (
-                            <div>
+                            <div className="space-y-1">
                                 <p className="text-muted-foreground">Room type</p>
                                 <p>{review.roomType}</p>
                             </div>
                         ) : null}
                         {review.stayDate ? (
-                            <div>
+                            <div className="space-y-1">
                                 <p className="text-muted-foreground">Stay date</p>
                                 <p>{format(new Date(review.stayDate), 'dd MMM yyyy')}</p>
                             </div>
@@ -194,15 +194,15 @@ export function ReviewDetailSheet({
                     <Separator />
 
                     {review.positiveText ? (
-                        <div>
-                            <p className="mb-2 text-sm font-medium">What went well</p>
+                        <div className="space-y-2">
+                            <p className="text-sm font-medium">What went well</p>
                             <p className="text-sm leading-relaxed text-muted-foreground">{review.positiveText}</p>
                         </div>
                     ) : null}
 
                     {review.negativeText ? (
-                        <div>
-                            <p className="mb-2 text-sm font-medium">What could improve</p>
+                        <div className="space-y-2">
+                            <p className="text-sm font-medium">What could improve</p>
                             <p className="text-sm leading-relaxed text-muted-foreground">{review.negativeText}</p>
                         </div>
                     ) : null}

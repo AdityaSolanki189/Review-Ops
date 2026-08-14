@@ -30,12 +30,13 @@ async function fetchReviews(filters: ReviewFilters): Promise<ReviewsPage> {
     return fetchJson(`/api/reviews${buildReviewsSearchParams(filters)}`)
 }
 
-export function useReviewsQuery(filters: Omit<ReviewFilters, 'cursor'>) {
+export function useReviewsQuery(filters: Omit<ReviewFilters, 'cursor'>, options?: { enabled?: boolean }) {
     return useInfiniteQuery({
         queryKey: queryKeys.reviews.list(filters),
         queryFn: ({ pageParam }) => fetchReviews({ ...filters, cursor: pageParam }),
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+        enabled: options?.enabled ?? true,
     })
 }
 
