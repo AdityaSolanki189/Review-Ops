@@ -1,5 +1,5 @@
-import { drizzle } from 'drizzle-orm/neon-serverless'
-import { Pool } from '@neondatabase/serverless'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Pool } from 'pg'
 import * as schema from '@/db/schema'
 import { config } from '@/lib/config/server'
 
@@ -11,4 +11,4 @@ const db = drizzle(pool, {
     casing: 'snake_case',
 })
 
-export { db }
+export { db, pool }
