@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { NegativeTopicsChart } from '@/components/dashboard/dashboard-charts'
 import { ReviewCard } from '@/components/dashboard/dashboard-parts'
 import { QueryState } from '@/components/query-state'
@@ -10,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatTopicLabel } from '@/lib/classification/topics'
 import type { ReviewTopicKey } from '@/lib/classification/topics'
+import { buildReviewsDrillDownUrl, resolveScopeFromSearchParams, scopeComparisonLabel } from '@/lib/dashboard-scope'
 import { ApiError } from '@/lib/queries/api'
 import { usePropertyBySlugQuery, usePropertyTopicMixQuery } from '@/lib/queries/properties.queries'
 import { useReviewsQuery, type ReviewListItem } from '@/lib/queries/reviews.queries'
@@ -19,6 +21,8 @@ interface PropertyDetailViewProps {
 }
 
 export function PropertyDetailView({ slug }: PropertyDetailViewProps) {
+    const searchParams = useSearchParams()
+    const scope = resolveScopeFromSearchParams(searchParams)
     const propertyQuery = usePropertyBySlugQuery(slug)
     const topicMixQuery = usePropertyTopicMixQuery(slug)
     const reviewsQuery = useReviewsQuery({ propertySlug: slug, limit: 10 })
@@ -58,6 +62,7 @@ export function PropertyDetailView({ slug }: PropertyDetailViewProps) {
                     property={propertyQuery.data}
                     topicMix={topicMixQuery.data}
                     recentReviews={reviewsQuery.data.pages[0]?.items ?? []}
+                    scope={scope}
                 />
             ) : null}
         </QueryState>
@@ -68,10 +73,12 @@ function PropertyDetailContent({
     property,
     topicMix,
     recentReviews,
+    scope,
 }: {
     property: NonNullable<ReturnType<typeof usePropertyBySlugQuery>['data']>
     topicMix: NonNullable<ReturnType<typeof usePropertyTopicMixQuery>['data']>
     recentReviews: ReviewListItem[]
+    scope: ReturnType<typeof resolveScopeFromSearchParams>
 }) {
     const negativeTopics = topicMix
         .filter((row) => row.sentiment === 'negative')
@@ -94,11 +101,20 @@ function PropertyDetailContent({
                         Back to properties
                     </Link>
                     <h2 className="mt-2 text-2xl font-semibold tracking-tight">{property.name}</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">{scopeComparisonLabel(scope)}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{property.bookingUrl}</p>
                 </div>
-                <Badge variant="outline" className="font-mono tabular-nums">
-                    Booking ID: {property.bookingPropertyId}
-                </Badge>
+                <div className="flex flex-col items-end gap-2">
+                    <Badge variant="outline" className="font-mono tabular-nums">
+                        Booking ID: {property.bookingPropertyId}
+                    </Badge>
+                    <Link
+                        href={buildReviewsDrillDownUrl({ scope, property: property.slug, representative: true })}
+                        className="text-sm font-medium text-primary hover:underline"
+                    >
+                        View filtered reviews
+                    </Link>
+                </div>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">

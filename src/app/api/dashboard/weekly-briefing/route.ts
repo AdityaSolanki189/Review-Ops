@@ -1,7 +1,4 @@
-import { NextResponse } from 'next/server'
-import { getWeeklyBriefing } from '@/lib/ai/weekly-briefing'
+import { createDashboardRoute } from '@/app/api/dashboard/_route'
+import { getPortfolioBriefing } from '@/lib/ai/weekly-briefing'
 
-export async function GET() {
-    const data = await getWeeklyBriefing()
-    return NextResponse.json(data)
-}
+export const GET = createDashboardRoute((scope) => getPortfolioBriefing(scope.public))

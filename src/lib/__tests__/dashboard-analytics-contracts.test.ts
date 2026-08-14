@@ -96,6 +96,8 @@ describe('mapOverviewResponse', () => {
             classifiedPrevious: 6,
             currentTopics: [{ topic: 'noise', reviewCount: 2 }],
             previousTopics: [],
+            currentPositiveTopics: [{ topic: 'location', reviewCount: 4 }],
+            previousPositiveTopics: [{ topic: 'location', reviewCount: 2 }],
             propertyCurrent: [
                 { slug: 'central-sydney', name: 'Central Sydney', averageRating: 8, reviewCount: 10, lowScoreCount: 2 },
             ],
@@ -115,6 +117,8 @@ describe('mapOverviewResponse', () => {
             sampleSize: 10,
             status: 'available',
         })
+        assert.equal(result.topPositiveTopic?.topic, 'location')
+        assert.equal(result.topPositiveTopic?.positiveMentionRate, 40)
         assert.deepEqual(result.propertyComparison[1]?.averageRating, {
             value: null,
             previousValue: 6,

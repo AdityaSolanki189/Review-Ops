@@ -2,38 +2,49 @@
 
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { useSearchParams } from 'next/navigation'
+import { PeriodRatingTrendChart, RatingBandDistributionChart } from '@/components/dashboard/dashboard-charts'
 import {
-    ChartSectionSkeleton,
-    NegativeTopicsChart,
-    PropertyCompareChart,
-    RatingDistributionChart,
-    WeeklyRatingTrendChart,
-} from '@/components/dashboard/dashboard-charts'
-import { ReviewCard, StaleDataBanner, StatCard, SyncStatusBadge } from '@/components/dashboard/dashboard-parts'
+    FreshnessStrip,
+    MetricCard,
+    PortfolioStatusStrip,
+    ReviewCard,
+    StaleDataBanner,
+    SyncStatusBadge,
+} from '@/components/dashboard/dashboard-parts'
+import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
 import { QueryState, RefreshButton } from '@/components/query-state'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatTopicLabel } from '@/lib/classification/topics'
+import type { ReviewTopicKey } from '@/lib/classification/topics'
+import {
+    buildPortfolioStatus,
+    formatMetricDelta,
+    formatMetricValue,
+    isAnomalyIssue,
+    portfolioAverageRating,
+    propertyVsPortfolioGap,
+} from '@/lib/dashboard-status'
+import { buildReviewsDrillDownUrl, resolveScopeFromSearchParams, shortPropertyName } from '@/lib/dashboard-scope'
 import { useInvalidateCache } from '@/lib/mutations/cache.mutations'
 import {
+    useDashboardIssuesQuery,
+    useDashboardOverviewQuery,
     useDashboardRecentReviewsQuery,
-    usePropertyPerformanceQuery,
-    useRatingDistributionQuery,
+    useDashboardSeriesQuery,
+    useDashboardTopicMatrixQuery,
+    usePortfolioBriefingQuery,
     useSyncHealthQuery,
-    useTopicTrendsQuery,
-    useWeeklyBriefingQuery,
-    useWeeklySeriesQuery,
-    useWeeklyStatsQuery,
 } from '@/lib/queries/dashboard.queries'
-
-function shortPropertyName(name: string): string {
-    return name.replace('Azzurro Pod Hotel - ', '').replace('Olympic Hotel ', 'Olympic ')
-}
+import { usePropertiesListQuery } from '@/lib/queries/properties.queries'
 
 function KpiSkeleton() {
     return (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <Skeleton className="h-32" />
             <Skeleton className="h-32" />
             <Skeleton className="h-32" />
             <Skeleton className="h-32" />
@@ -41,35 +52,37 @@ function KpiSkeleton() {
     )
 }
 
+function heatCellClass(rate: number | null): string {
+    if (rate === null || rate === 0) return 'bg-muted/40 text-muted-foreground'
+    if (rate >= 20) return 'bg-destructive/15 text-destructive'
+    if (rate >= 10) return 'bg-amber-500/15 text-amber-900 dark:text-amber-200'
+    return 'bg-primary/10 text-foreground'
+}
+
 export function DashboardView() {
-    const weeklyStats = useWeeklyStatsQuery()
-    const propertyPerformance = usePropertyPerformanceQuery()
-    const topicTrends = useTopicTrendsQuery()
-    const weeklySeries = useWeeklySeriesQuery()
-    const ratingDistribution = useRatingDistributionQuery()
-    const recentReviews = useDashboardRecentReviewsQuery()
-    const syncHealth = useSyncHealthQuery()
-    const weeklyBriefing = useWeeklyBriefingQuery()
+    const searchParams = useSearchParams()
+    const scope = resolveScopeFromSearchParams(searchParams)
+    const propertiesQuery = usePropertiesListQuery()
+    const overviewQuery = useDashboardOverviewQuery(scope)
+    const issuesQuery = useDashboardIssuesQuery(scope)
+    const topicMatrixQuery = useDashboardTopicMatrixQuery(scope)
+    const seriesQuery = useDashboardSeriesQuery(scope)
+    const recentReviewsQuery = useDashboardRecentReviewsQuery()
+    const syncHealthQuery = useSyncHealthQuery()
+    const briefingQuery = usePortfolioBriefingQuery(scope)
     const invalidateCache = useInvalidateCache()
 
-    const ratingDelta =
-        weeklyStats.data != null ? weeklyStats.data.thisWeek.avgRating - weeklyStats.data.lastWeek.avgRating : undefined
-    const reviewDelta =
-        weeklyStats.data != null
-            ? weeklyStats.data.thisWeek.reviewCount - weeklyStats.data.lastWeek.reviewCount
-            : undefined
-
-    const topTopic = topicTrends.data?.[0]
-    const worstProperty = propertyPerformance.data
-        ?.filter((row) => row.reviewCount > 0)
-        .sort((a, b) => a.delta - b.delta)[0]
+    const overview = overviewQuery.data
+    const issues = issuesQuery.data?.issues ?? []
+    const portfolioAvg = overview ? portfolioAverageRating(overview.propertyComparison) : null
+    const statusSignals = overview ? buildPortfolioStatus(overview, issues) : []
 
     return (
         <div className="space-y-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                     <p className="text-sm text-muted-foreground">
-                        Review analytics for Azzurro Hotels Sydney properties
+                        Portfolio performance across Azzurro Sydney properties
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -78,75 +91,111 @@ export function DashboardView() {
                 </div>
             </div>
 
-            {syncHealth.data && (syncHealth.data.isStale || syncHealth.data.hasBlockedOrFailed) ? (
+            {propertiesQuery.data ? <DashboardScopeBar properties={propertiesQuery.data} /> : null}
+
+            {syncHealthQuery.data && (syncHealthQuery.data.isStale || syncHealthQuery.data.hasBlockedOrFailed) ? (
                 <StaleDataBanner />
             ) : null}
 
             <QueryState
-                isLoading={weeklyStats.isLoading}
-                isError={weeklyStats.isError}
-                error={weeklyStats.error}
-                onRetry={() => weeklyStats.refetch()}
-                skeleton={<KpiSkeleton />}
+                isLoading={overviewQuery.isLoading}
+                isError={overviewQuery.isError}
+                error={overviewQuery.error}
+                onRetry={() => overviewQuery.refetch()}
+                skeleton={<Skeleton className="h-10 w-full max-w-3xl" />}
             >
-                {weeklyStats.data && syncHealth.data ? (
-                    <>
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <StatCard
-                                title="Average rating this week"
-                                value={weeklyStats.data.thisWeek.avgRating.toFixed(1)}
-                                subtitle="Booking.com 1-10 scale"
-                                delta={ratingDelta}
-                            />
-                            <StatCard
-                                title="Reviews this week"
-                                value={String(weeklyStats.data.thisWeek.reviewCount)}
-                                subtitle={`${reviewDelta != null && reviewDelta >= 0 ? '+' : ''}${reviewDelta ?? 0} vs last week`}
-                            />
-                            <StatCard
-                                title="New reviews last sync"
-                                value={String(syncHealth.data.totalNewReviews)}
-                                subtitle="Across all properties"
-                            />
-                        </div>
-
-                        {(topTopic || worstProperty) && (
-                            <Card>
-                                <CardContent className="space-y-2 pt-6 text-sm text-muted-foreground">
-                                    {worstProperty && worstProperty.delta < 0 ? (
-                                        <p>
-                                            <strong className="text-foreground">
-                                                {shortPropertyName(worstProperty.property.name)}
-                                            </strong>{' '}
-                                            dropped {Math.abs(worstProperty.delta).toFixed(1)} points this week.
-                                        </p>
-                                    ) : null}
-                                    {topTopic ? (
-                                        <p>
-                                            <strong className="text-foreground">{topTopic.percentage}%</strong> of
-                                            negative reviews mentioned{' '}
-                                            <strong className="text-foreground">
-                                                {formatTopicLabel(topTopic.topic)}
-                                            </strong>
-                                            .
-                                        </p>
-                                    ) : null}
-                                </CardContent>
-                            </Card>
-                        )}
-                    </>
+                {overview ? (
+                    <FreshnessStrip
+                        latestReviewAt={overview.freshness.latestReviewAt}
+                        latestScrapedAt={overview.freshness.latestScrapedAt}
+                        sources={overview.freshness.sources}
+                        classificationCoverage={overview.classificationCoverage.value}
+                    />
                 ) : null}
             </QueryState>
 
             <QueryState
-                isLoading={weeklyBriefing.isLoading}
-                isError={weeklyBriefing.isError}
-                error={weeklyBriefing.error}
-                onRetry={() => weeklyBriefing.refetch()}
+                isLoading={overviewQuery.isLoading || issuesQuery.isLoading}
+                isError={overviewQuery.isError || issuesQuery.isError}
+                error={overviewQuery.error ?? issuesQuery.error}
+                onRetry={() => {
+                    void overviewQuery.refetch()
+                    void issuesQuery.refetch()
+                }}
+                skeleton={<Skeleton className="h-40 w-full" />}
+            >
+                {statusSignals.length > 0 ? <PortfolioStatusStrip signals={statusSignals} /> : null}
+            </QueryState>
+
+            <QueryState
+                isLoading={overviewQuery.isLoading}
+                isError={overviewQuery.isError}
+                error={overviewQuery.error}
+                onRetry={() => overviewQuery.refetch()}
+                skeleton={<KpiSkeleton />}
+            >
+                {overview ? (
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <MetricCard
+                            title="Average rating"
+                            value={formatMetricValue(overview.averageRating)}
+                            subtitle={`${overview.reviewActivity.sampleSize} reviews in period`}
+                            delta={overview.averageRating.delta}
+                            insufficient={overview.averageRating.status === 'insufficient_data'}
+                        />
+                        <MetricCard
+                            title="Review activity"
+                            value={
+                                overview.reviewActivity.value === null
+                                    ? 'No reviews'
+                                    : String(overview.reviewActivity.value)
+                            }
+                            subtitle={formatMetricDelta(overview.reviewActivity, ' reviews')}
+                            delta={overview.reviewActivity.delta}
+                            deltaSuffix=""
+                            insufficient={overview.reviewActivity.status === 'insufficient_data'}
+                        />
+                        <MetricCard
+                            title="Low-score rate"
+                            value={
+                                overview.lowScoreRate.value === null
+                                    ? 'No reviews'
+                                    : `${overview.lowScoreRate.value.toFixed(1)}%`
+                            }
+                            subtitle="Ratings ≤5"
+                            delta={overview.lowScoreRate.delta}
+                            deltaSuffix=" pp"
+                            insufficient={overview.lowScoreRate.status === 'insufficient_data'}
+                        />
+                        <MetricCard
+                            title="Top negative topic"
+                            value={
+                                overview.topNegativeTopic
+                                    ? formatTopicLabel(overview.topNegativeTopic.topic)
+                                    : 'None detected'
+                            }
+                            subtitle={
+                                overview.topNegativeTopic
+                                    ? `${overview.topNegativeTopic.negativeMentionRate.toFixed(1)}% of reviews`
+                                    : 'No classified negative topics'
+                            }
+                            delta={overview.topNegativeTopic?.momentumPercentagePoints}
+                            deltaSuffix=" pp"
+                            insufficient={overview.topNegativeTopic?.status === 'insufficient_data'}
+                        />
+                    </div>
+                ) : null}
+            </QueryState>
+
+            <QueryState
+                isLoading={briefingQuery.isLoading}
+                isError={briefingQuery.isError}
+                error={briefingQuery.error}
+                onRetry={() => briefingQuery.refetch()}
                 skeleton={
                     <Card>
                         <CardHeader>
-                            <CardTitle>This week&apos;s briefing</CardTitle>
+                            <CardTitle>Portfolio brief</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <Skeleton className="h-20 w-full" />
@@ -154,30 +203,207 @@ export function DashboardView() {
                     </Card>
                 }
             >
-                {weeklyBriefing.data?.available ? (
+                {briefingQuery.data?.available ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle>This week&apos;s briefing</CardTitle>
-                            <CardDescription>AI summary of portfolio review trends</CardDescription>
+                            <CardTitle>Portfolio brief</CardTitle>
+                            <CardDescription>
+                                {briefingQuery.data.source === 'ai'
+                                    ? 'AI-enhanced summary from calculated metrics'
+                                    : 'Summary from calculated metrics'}
+                            </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-3 text-sm">
-                            <p>{weeklyBriefing.data.summary}</p>
-                            {weeklyBriefing.data.actions.length > 0 ? (
+                            <p>{briefingQuery.data.summary}</p>
+                            {briefingQuery.data.actions.length > 0 ? (
                                 <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                                    {weeklyBriefing.data.actions.map((action) => (
+                                    {briefingQuery.data.actions.map((action) => (
                                         <li key={action}>{action}</li>
                                     ))}
                                 </ul>
                             ) : null}
                         </CardContent>
                     </Card>
-                ) : weeklyBriefing.data && !weeklyBriefing.data.available ? (
+                ) : briefingQuery.data && !briefingQuery.data.available ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle>This week&apos;s briefing</CardTitle>
+                            <CardTitle>Portfolio brief</CardTitle>
                         </CardHeader>
                         <CardContent className="text-sm text-muted-foreground">
-                            {weeklyBriefing.data.message}
+                            {briefingQuery.data.message}
+                        </CardContent>
+                    </Card>
+                ) : null}
+            </QueryState>
+
+            <QueryState
+                isLoading={issuesQuery.isLoading}
+                isError={issuesQuery.isError}
+                error={issuesQuery.error}
+                onRetry={() => issuesQuery.refetch()}
+                skeleton={
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Needs attention</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-40 w-full" />
+                        </CardContent>
+                    </Card>
+                }
+            >
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Needs attention</CardTitle>
+                        <CardDescription>
+                            Negative topic momentum ranked by percentage-point change. Rating gap shows association, not
+                            causality.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {issues.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">
+                                No major operational issue spikes detected in this period.
+                            </p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Property</TableHead>
+                                            <TableHead>Topic</TableHead>
+                                            <TableHead>Negative rate</TableHead>
+                                            <TableHead>Change</TableHead>
+                                            <TableHead>Rating gap</TableHead>
+                                            <TableHead>Sample</TableHead>
+                                            <TableHead>Latest</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {issues.slice(0, 8).map((issue) => {
+                                            const href = buildReviewsDrillDownUrl({
+                                                scope,
+                                                property: issue.propertySlug,
+                                                topic: issue.topic,
+                                                sentiment: 'negative',
+                                                representative: true,
+                                            })
+                                            return (
+                                                <TableRow key={`${issue.propertySlug}-${issue.topic}`}>
+                                                    <TableCell>
+                                                        <Link href={href} className="font-medium hover:underline">
+                                                            {formatPropertySlug(issue.propertySlug)}
+                                                        </Link>
+                                                    </TableCell>
+                                                    <TableCell>{formatTopicLabel(issue.topic)}</TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {issue.negativeMentionRate.toFixed(1)}%
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {issue.momentumPercentagePoints !== null
+                                                            ? `${issue.momentumPercentagePoints >= 0 ? '+' : ''}${issue.momentumPercentagePoints.toFixed(1)} pp`
+                                                            : 'n/a'}
+                                                        {isAnomalyIssue(issue) ? (
+                                                            <Badge variant="destructive" className="ml-2">
+                                                                Anomaly
+                                                            </Badge>
+                                                        ) : null}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {issue.ratingGap !== null
+                                                            ? `${issue.ratingGap >= 0 ? '+' : ''}${issue.ratingGap.toFixed(1)}`
+                                                            : 'n/a'}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {issue.sampleSize}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {issue.latestReviewAt
+                                                            ? format(new Date(issue.latestReviewAt), 'd MMM yyyy')
+                                                            : '-'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </QueryState>
+
+            <QueryState
+                isLoading={topicMatrixQuery.isLoading}
+                isError={topicMatrixQuery.isError}
+                error={topicMatrixQuery.error}
+                onRetry={() => topicMatrixQuery.refetch()}
+                skeleton={
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Topic heatmap</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <Skeleton className="h-48 w-full" />
+                        </CardContent>
+                    </Card>
+                }
+            >
+                {topicMatrixQuery.data ? (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Topic heatmap</CardTitle>
+                            <CardDescription>
+                                Negative mention rate by property and topic (% of reviews)
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="overflow-x-auto">
+                            {topicMatrixQuery.data.rows.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No topic data for this period.</p>
+                            ) : (
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Property</TableHead>
+                                            {topicMatrixQuery.data.topics.map((topic) => (
+                                                <TableHead key={topic} className="text-center text-xs">
+                                                    {formatTopicLabel(topic).split(' ')[0]}
+                                                </TableHead>
+                                            ))}
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {topicMatrixQuery.data.rows.map((row) => (
+                                            <TableRow key={row.property.slug}>
+                                                <TableCell className="font-medium">
+                                                    {shortPropertyName(row.property.name)}
+                                                </TableCell>
+                                                {topicMatrixQuery.data.topics.map((topic) => {
+                                                    const cell = row.cells[topic as ReviewTopicKey]
+                                                    const href = buildReviewsDrillDownUrl({
+                                                        scope,
+                                                        property: row.property.slug,
+                                                        topic: topic as ReviewTopicKey,
+                                                        sentiment: 'negative',
+                                                    })
+                                                    return (
+                                                        <TableCell key={topic} className="p-1">
+                                                            <Link
+                                                                href={href}
+                                                                className={`block rounded px-2 py-1 text-center text-xs font-mono tabular-nums ${heatCellClass(cell.negativeMentionRate)}`}
+                                                            >
+                                                                {cell.negativeMentionRate === null
+                                                                    ? '-'
+                                                                    : `${cell.negativeMentionRate.toFixed(0)}%`}
+                                                            </Link>
+                                                        </TableCell>
+                                                    )
+                                                })}
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            )}
                         </CardContent>
                     </Card>
                 ) : null}
@@ -185,47 +411,39 @@ export function DashboardView() {
 
             <div className="grid gap-6 xl:grid-cols-2">
                 <QueryState
-                    isLoading={weeklySeries.isLoading}
-                    isError={weeklySeries.isError}
-                    error={weeklySeries.error}
-                    onRetry={() => weeklySeries.refetch()}
-                    skeleton={<ChartSectionSkeleton title="Rating trend" />}
-                >
-                    {weeklySeries.data ? (
+                    isLoading={seriesQuery.isLoading}
+                    isError={seriesQuery.isError}
+                    error={seriesQuery.error}
+                    onRetry={() => seriesQuery.refetch()}
+                    skeleton={
                         <Card>
                             <CardHeader>
                                 <CardTitle>Rating trend</CardTitle>
-                                <CardDescription>Last 8 weeks across all properties</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                {weeklySeries.data.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">No review history yet.</p>
-                                ) : (
-                                    <WeeklyRatingTrendChart data={weeklySeries.data} />
-                                )}
+                                <Skeleton className="h-[280px] w-full" />
                             </CardContent>
                         </Card>
-                    ) : null}
-                </QueryState>
-
-                <QueryState
-                    isLoading={propertyPerformance.isLoading}
-                    isError={propertyPerformance.isError}
-                    error={propertyPerformance.error}
-                    onRetry={() => propertyPerformance.refetch()}
-                    skeleton={<ChartSectionSkeleton title="Property comparison" />}
+                    }
                 >
-                    {propertyPerformance.data ? (
+                    {seriesQuery.data ? (
                         <Card>
                             <CardHeader>
-                                <CardTitle>Property comparison</CardTitle>
-                                <CardDescription>This week vs last week average rating</CardDescription>
+                                <CardTitle>Rating trend</CardTitle>
+                                <CardDescription>
+                                    {seriesQuery.data.granularity === 'day' ? 'Daily' : 'Weekly'} average rating and
+                                    review volume
+                                </CardDescription>
                             </CardHeader>
                             <CardContent>
-                                {propertyPerformance.data.every((row) => row.reviewCount === 0) ? (
-                                    <p className="text-sm text-muted-foreground">No reviews this week yet.</p>
+                                {seriesQuery.data.rating.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No review history in this period.</p>
                                 ) : (
-                                    <PropertyCompareChart data={propertyPerformance.data} />
+                                    <PeriodRatingTrendChart
+                                        rating={seriesQuery.data.rating}
+                                        reviewVolume={seriesQuery.data.reviewVolume}
+                                        granularity={seriesQuery.data.granularity}
+                                    />
                                 )}
                             </CardContent>
                         </Card>
@@ -233,47 +451,32 @@ export function DashboardView() {
                 </QueryState>
 
                 <QueryState
-                    isLoading={topicTrends.isLoading}
-                    isError={topicTrends.isError}
-                    error={topicTrends.error}
-                    onRetry={() => topicTrends.refetch()}
-                    skeleton={<ChartSectionSkeleton title="Negative review topics" />}
-                >
-                    {topicTrends.data ? (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Negative review topics</CardTitle>
-                                <CardDescription>Most mentioned issues this week</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {topicTrends.data.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">No negative reviews this week yet.</p>
-                                ) : (
-                                    <NegativeTopicsChart data={topicTrends.data} />
-                                )}
-                            </CardContent>
-                        </Card>
-                    ) : null}
-                </QueryState>
-
-                <QueryState
-                    isLoading={ratingDistribution.isLoading}
-                    isError={ratingDistribution.isError}
-                    error={ratingDistribution.error}
-                    onRetry={() => ratingDistribution.refetch()}
-                    skeleton={<ChartSectionSkeleton title="Rating distribution" />}
-                >
-                    {ratingDistribution.data ? (
+                    isLoading={seriesQuery.isLoading}
+                    isError={seriesQuery.isError}
+                    error={seriesQuery.error}
+                    onRetry={() => seriesQuery.refetch()}
+                    skeleton={
                         <Card>
                             <CardHeader>
                                 <CardTitle>Rating distribution</CardTitle>
-                                <CardDescription>How scores cluster this week</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                {ratingDistribution.data.length === 0 ? (
-                                    <p className="text-sm text-muted-foreground">No reviews this week yet.</p>
+                                <Skeleton className="h-[240px] w-full" />
+                            </CardContent>
+                        </Card>
+                    }
+                >
+                    {seriesQuery.data ? (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Rating distribution</CardTitle>
+                                <CardDescription>How scores cluster in the selected period</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {seriesQuery.data.ratingBands.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">No reviews in this period.</p>
                                 ) : (
-                                    <RatingDistributionChart data={ratingDistribution.data} />
+                                    <RatingBandDistributionChart data={seriesQuery.data.ratingBands} />
                                 )}
                             </CardContent>
                         </Card>
@@ -282,14 +485,14 @@ export function DashboardView() {
             </div>
 
             <QueryState
-                isLoading={syncHealth.isLoading}
-                isError={syncHealth.isError}
-                error={syncHealth.error}
-                onRetry={() => syncHealth.refetch()}
+                isLoading={overviewQuery.isLoading}
+                isError={overviewQuery.isError}
+                error={overviewQuery.error}
+                onRetry={() => overviewQuery.refetch()}
                 skeleton={
                     <Card>
                         <CardHeader>
-                            <CardTitle>Last synchronization</CardTitle>
+                            <CardTitle>Property comparison</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <Skeleton className="h-40 w-full" />
@@ -297,24 +500,104 @@ export function DashboardView() {
                     </Card>
                 }
             >
-                {syncHealth.data ? (
+                {overview ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Last synchronization</CardTitle>
+                            <CardTitle>Property comparison</CardTitle>
+                            <CardDescription>
+                                Current period vs previous period. Portfolio average:{' '}
+                                {portfolioAvg !== null ? portfolioAvg.toFixed(1) : 'n/a'}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Property</TableHead>
+                                        <TableHead>Rating</TableHead>
+                                        <TableHead>vs previous</TableHead>
+                                        <TableHead>vs portfolio</TableHead>
+                                        <TableHead>Reviews</TableHead>
+                                        <TableHead>Low-score rate</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {overview.propertyComparison.map((row) => {
+                                        const gap = propertyVsPortfolioGap(row.averageRating.value, portfolioAvg)
+                                        const href = buildReviewsDrillDownUrl({
+                                            scope,
+                                            property: row.property.slug,
+                                        })
+                                        return (
+                                            <TableRow key={row.property.slug}>
+                                                <TableCell>
+                                                    <Link href={href} className="font-medium hover:underline">
+                                                        {shortPropertyName(row.property.name)}
+                                                    </Link>
+                                                </TableCell>
+                                                <TableCell className="font-mono tabular-nums">
+                                                    {row.averageRating.value?.toFixed(1) ?? '-'}
+                                                </TableCell>
+                                                <TableCell className="font-mono tabular-nums">
+                                                    {row.averageRating.delta !== null
+                                                        ? `${row.averageRating.delta >= 0 ? '+' : ''}${row.averageRating.delta.toFixed(1)}`
+                                                        : 'n/a'}
+                                                </TableCell>
+                                                <TableCell className="font-mono tabular-nums">
+                                                    {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(1)}` : 'n/a'}
+                                                </TableCell>
+                                                <TableCell className="font-mono tabular-nums">
+                                                    {row.reviewActivity.sampleSize}
+                                                </TableCell>
+                                                <TableCell className="font-mono tabular-nums">
+                                                    {row.lowScoreRate.value !== null
+                                                        ? `${row.lowScoreRate.value.toFixed(1)}%`
+                                                        : '-'}
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </CardContent>
+                    </Card>
+                ) : null}
+            </QueryState>
+
+            <QueryState
+                isLoading={syncHealthQuery.isLoading}
+                isError={syncHealthQuery.isError}
+                error={syncHealthQuery.error}
+                onRetry={() => syncHealthQuery.refetch()}
+                skeleton={
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Sync health</CardTitle>
                         </CardHeader>
                         <CardContent>
+                            <Skeleton className="h-32 w-full" />
+                        </CardContent>
+                    </Card>
+                }
+            >
+                {syncHealthQuery.data ? (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Sync health</CardTitle>
+                            <CardDescription>Last scrape run per property</CardDescription>
+                        </CardHeader>
+                        <CardContent className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Property</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Finished</TableHead>
-                                        <TableHead>Latest review</TableHead>
                                         <TableHead>Inserted</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {syncHealth.data.latestRuns.map(({ property, run }) => (
+                                    {syncHealthQuery.data.latestRuns.map(({ property, run }) => (
                                         <TableRow key={property.id}>
                                             <TableCell>{shortPropertyName(property.name)}</TableCell>
                                             <TableCell>
@@ -323,14 +606,7 @@ export function DashboardView() {
                                             <TableCell>
                                                 {run?.finishedAt
                                                     ? format(run.finishedAt, 'dd MMM yyyy, HH:mm')
-                                                    : 'In progress / never'}
-                                            </TableCell>
-                                            <TableCell>
-                                                {run?.newestReviewAt
-                                                    ? format(run.newestReviewAt, 'dd MMM yyyy')
-                                                    : property.latestReviewAt
-                                                      ? format(property.latestReviewAt, 'dd MMM yyyy')
-                                                      : '-'}
+                                                    : 'Never'}
                                             </TableCell>
                                             <TableCell className="font-mono tabular-nums">
                                                 {run?.reviewsInserted ?? '0'}
@@ -345,10 +621,10 @@ export function DashboardView() {
             </QueryState>
 
             <QueryState
-                isLoading={recentReviews.isLoading}
-                isError={recentReviews.isError}
-                error={recentReviews.error}
-                onRetry={() => recentReviews.refetch()}
+                isLoading={recentReviewsQuery.isLoading}
+                isError={recentReviewsQuery.isError}
+                error={recentReviewsQuery.error}
+                onRetry={() => recentReviewsQuery.refetch()}
                 skeleton={
                     <div className="grid gap-4 md:grid-cols-2">
                         <Skeleton className="h-40" />
@@ -356,16 +632,16 @@ export function DashboardView() {
                     </div>
                 }
             >
-                {recentReviews.data ? (
+                {recentReviewsQuery.data ? (
                     <div>
                         <div className="mb-4 flex items-center justify-between">
-                            <h2 className="text-xl font-semibold tracking-tight">Recent reviews</h2>
+                            <h2 className="text-xl font-semibold tracking-tight">Recent evidence</h2>
                             <Link href="/reviews" className="text-sm text-primary hover:underline">
-                                View all
+                                View all reviews
                             </Link>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
-                            {recentReviews.data.length === 0 ? (
+                            {recentReviewsQuery.data.length === 0 ? (
                                 <Card>
                                     <CardContent className="pt-6 text-sm text-muted-foreground">
                                         No reviews yet. Run{' '}
@@ -376,7 +652,7 @@ export function DashboardView() {
                                     </CardContent>
                                 </Card>
                             ) : (
-                                recentReviews.data.map((review) => (
+                                recentReviewsQuery.data.map((review) => (
                                     <ReviewCard
                                         key={review.id}
                                         review={review}
@@ -390,4 +666,11 @@ export function DashboardView() {
             </QueryState>
         </div>
     )
+}
+
+function formatPropertySlug(slug: string): string {
+    return slug
+        .split('-')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ')
 }

@@ -60,7 +60,11 @@ async function getClassifiedReviewCount(scope: ResolvedAnalyticsScope, period: A
     return number(row?.count)
 }
 
-async function getNegativeTopics(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+async function getTopicsBySentiment(
+    scope: ResolvedAnalyticsScope,
+    period: AnalyticsPeriod,
+    sentiment: 'negative' | 'positive',
+) {
     const rows = await db
         .select({
             topic: reviewTopics.topic,
@@ -69,11 +73,19 @@ async function getNegativeTopics(scope: ResolvedAnalyticsScope, period: Analytic
         .from(reviewTopics)
         .innerJoin(reviews, eq(reviews.id, reviewTopics.reviewId))
         .innerJoin(properties, eq(properties.id, reviews.propertyId))
-        .where(and(scopeConditions(scope, period), eq(reviewTopics.sentiment, 'negative')))
+        .where(and(scopeConditions(scope, period), eq(reviewTopics.sentiment, sentiment)))
         .groupBy(reviewTopics.topic)
         .orderBy(desc(sql`count(distinct ${reviewTopics.reviewId})`))
 
     return rows.map((row) => ({ ...row, reviewCount: number(row.reviewCount) }))
+}
+
+async function getNegativeTopics(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+    return getTopicsBySentiment(scope, period, 'negative')
+}
+
+async function getPositiveTopics(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+    return getTopicsBySentiment(scope, period, 'positive')
 }
 
 async function getPropertySummaries(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
@@ -117,6 +129,8 @@ export async function getDashboardOverview(scope: ResolvedAnalyticsScope) {
             classifiedPrevious,
             currentTopics,
             previousTopics,
+            currentPositiveTopics,
+            previousPositiveTopics,
             propertyCurrent,
             propertyPrevious,
         ] = await Promise.all([
@@ -127,6 +141,8 @@ export async function getDashboardOverview(scope: ResolvedAnalyticsScope) {
             getClassifiedReviewCount(scope, scope.previous),
             getNegativeTopics(scope, scope),
             getNegativeTopics(scope, scope.previous),
+            getPositiveTopics(scope, scope),
+            getPositiveTopics(scope, scope.previous),
             getPropertySummaries(scope, scope),
             getPropertySummaries(scope, scope.previous),
         ])
@@ -140,6 +156,8 @@ export async function getDashboardOverview(scope: ResolvedAnalyticsScope) {
             classifiedPrevious,
             currentTopics,
             previousTopics,
+            currentPositiveTopics,
+            previousPositiveTopics,
             propertyCurrent,
             propertyPrevious,
         })

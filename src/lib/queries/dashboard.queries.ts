@@ -1,27 +1,33 @@
 import { useQuery } from '@tanstack/react-query'
-import type { ReviewFilters } from '@/db/queries/analytics'
+import type { AnalyticsScope } from '@/lib/analytics'
+import { buildDashboardApiUrl } from '@/lib/dashboard-scope'
 import { fetchJson } from '@/lib/queries/api'
 import { queryKeys } from '@/lib/queries/keys'
 
-type WeeklyStats = Awaited<ReturnType<typeof import('@/db/queries/analytics').getWeeklyStats>>
-type PropertyPerformance = Awaited<ReturnType<typeof import('@/db/queries/analytics').getPropertyPerformance>>
-type TopicTrends = Awaited<ReturnType<typeof import('@/db/queries/analytics').getNegativeTopicTrends>>
+type DashboardOverview = Awaited<ReturnType<typeof import('@/db/queries/dashboard-analytics').getDashboardOverview>>
+type DashboardIssues = Awaited<ReturnType<typeof import('@/db/queries/dashboard-analytics').getDashboardIssues>>
+type DashboardTopicMatrix = Awaited<
+    ReturnType<typeof import('@/db/queries/dashboard-analytics').getDashboardTopicMatrix>
+>
+type DashboardSeries = Awaited<ReturnType<typeof import('@/db/queries/dashboard-analytics').getDashboardSeries>>
 type RecentReviews = Awaited<ReturnType<typeof import('@/db/queries/analytics').getRecentReviews>>['items']
 type SyncHealth = Awaited<ReturnType<typeof import('@/db/queries/analytics').getSyncHealth>>
-type WeeklySeries = Awaited<ReturnType<typeof import('@/db/queries/analytics').getWeeklyRatingSeries>>
-type RatingDistribution = Awaited<ReturnType<typeof import('@/db/queries/analytics').getRatingDistribution>>
-type WeeklyBriefing = Awaited<ReturnType<typeof import('@/lib/ai/weekly-briefing').getWeeklyBriefing>>
+type PortfolioBriefing = Awaited<ReturnType<typeof import('@/lib/ai/weekly-briefing').getPortfolioBriefing>>
 
-async function fetchWeeklyStats(): Promise<WeeklyStats> {
-    return fetchJson('/api/dashboard/weekly-stats')
+async function fetchOverview(scope: AnalyticsScope): Promise<DashboardOverview> {
+    return fetchJson(buildDashboardApiUrl('/api/dashboard/overview', scope))
 }
 
-async function fetchPropertyPerformance(): Promise<PropertyPerformance> {
-    return fetchJson('/api/dashboard/property-performance')
+async function fetchIssues(scope: AnalyticsScope): Promise<DashboardIssues> {
+    return fetchJson(buildDashboardApiUrl('/api/dashboard/issues', scope))
 }
 
-async function fetchTopicTrends(): Promise<TopicTrends> {
-    return fetchJson('/api/dashboard/topic-trends')
+async function fetchTopicMatrix(scope: AnalyticsScope): Promise<DashboardTopicMatrix> {
+    return fetchJson(buildDashboardApiUrl('/api/dashboard/topic-matrix', scope))
+}
+
+async function fetchSeries(scope: AnalyticsScope): Promise<DashboardSeries> {
+    return fetchJson(buildDashboardApiUrl('/api/dashboard/series', scope))
 }
 
 async function fetchDashboardRecentReviews(): Promise<RecentReviews> {
@@ -32,36 +38,35 @@ async function fetchSyncHealth(): Promise<SyncHealth> {
     return fetchJson('/api/dashboard/sync-health')
 }
 
-async function fetchWeeklySeries(): Promise<WeeklySeries> {
-    return fetchJson('/api/dashboard/weekly-series')
+async function fetchPortfolioBriefing(scope: AnalyticsScope): Promise<PortfolioBriefing> {
+    return fetchJson(buildDashboardApiUrl('/api/dashboard/weekly-briefing', scope))
 }
 
-async function fetchRatingDistribution(): Promise<RatingDistribution> {
-    return fetchJson('/api/dashboard/rating-distribution')
-}
-
-async function fetchWeeklyBriefing(): Promise<WeeklyBriefing> {
-    return fetchJson('/api/dashboard/weekly-briefing')
-}
-
-export function useWeeklyStatsQuery() {
+export function useDashboardOverviewQuery(scope: AnalyticsScope) {
     return useQuery({
-        queryKey: queryKeys.dashboard.weeklyStats,
-        queryFn: fetchWeeklyStats,
+        queryKey: queryKeys.dashboard.overview(scope),
+        queryFn: () => fetchOverview(scope),
     })
 }
 
-export function usePropertyPerformanceQuery() {
+export function useDashboardIssuesQuery(scope: AnalyticsScope) {
     return useQuery({
-        queryKey: queryKeys.dashboard.propertyPerformance,
-        queryFn: fetchPropertyPerformance,
+        queryKey: queryKeys.dashboard.issues(scope),
+        queryFn: () => fetchIssues(scope),
     })
 }
 
-export function useTopicTrendsQuery() {
+export function useDashboardTopicMatrixQuery(scope: AnalyticsScope) {
     return useQuery({
-        queryKey: queryKeys.dashboard.topicTrends,
-        queryFn: fetchTopicTrends,
+        queryKey: queryKeys.dashboard.topicMatrix(scope),
+        queryFn: () => fetchTopicMatrix(scope),
+    })
+}
+
+export function useDashboardSeriesQuery(scope: AnalyticsScope) {
+    return useQuery({
+        queryKey: queryKeys.dashboard.series(scope),
+        queryFn: () => fetchSeries(scope),
     })
 }
 
@@ -79,25 +84,20 @@ export function useSyncHealthQuery() {
     })
 }
 
-export function useWeeklySeriesQuery() {
+export function usePortfolioBriefingQuery(scope: AnalyticsScope) {
     return useQuery({
-        queryKey: queryKeys.dashboard.weeklySeries,
-        queryFn: fetchWeeklySeries,
+        queryKey: queryKeys.dashboard.briefing(scope),
+        queryFn: () => fetchPortfolioBriefing(scope),
+        staleTime: 60_000,
     })
 }
 
-export function useRatingDistributionQuery() {
-    return useQuery({
-        queryKey: queryKeys.dashboard.ratingDistribution,
-        queryFn: fetchRatingDistribution,
-    })
+export type {
+    DashboardOverview,
+    DashboardIssues,
+    DashboardTopicMatrix,
+    DashboardSeries,
+    PortfolioBriefing,
+    RecentReviews,
+    SyncHealth,
 }
-
-export function useWeeklyBriefingQuery() {
-    return useQuery({
-        queryKey: queryKeys.dashboard.weeklyBriefing,
-        queryFn: fetchWeeklyBriefing,
-    })
-}
-
-export type { ReviewFilters }

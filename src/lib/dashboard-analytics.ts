@@ -54,13 +54,17 @@ export function mapOverviewResponse(input: {
     classifiedPrevious: number
     currentTopics: TopicCountRow[]
     previousTopics: TopicCountRow[]
+    currentPositiveTopics: TopicCountRow[]
+    previousPositiveTopics: TopicCountRow[]
     propertyCurrent: PropertySummaryRow[]
     propertyPrevious: PropertySummaryRow[]
 }) {
     const previousTopics = new Map(input.previousTopics.map((row) => [row.topic, row.reviewCount]))
+    const previousPositiveTopics = new Map(input.previousPositiveTopics.map((row) => [row.topic, row.reviewCount]))
     const currentByProperty = new Map(input.propertyCurrent.map((row) => [row.slug, row]))
     const previousByProperty = new Map(input.propertyPrevious.map((row) => [row.slug, row]))
     const topTopic = input.currentTopics[0]
+    const topPositiveTopicRow = input.currentPositiveTopics[0]
     const topCurrentRate = topTopic ? calculateRate(topTopic.reviewCount, input.current.reviewCount) : null
     const topPreviousRate = topTopic
         ? input.previous.reviewCount > 0
@@ -71,6 +75,22 @@ export function mapOverviewResponse(input: {
         ? createMetric({
               value: topCurrentRate,
               previousValue: topPreviousRate,
+              sampleSize: input.current.reviewCount,
+              previousSampleSize: input.previous.reviewCount,
+          })
+        : null
+    const topPositiveCurrentRate = topPositiveTopicRow
+        ? calculateRate(topPositiveTopicRow.reviewCount, input.current.reviewCount)
+        : null
+    const topPositivePreviousRate = topPositiveTopicRow
+        ? input.previous.reviewCount > 0
+            ? calculateRate(previousPositiveTopics.get(topPositiveTopicRow.topic) ?? 0, input.previous.reviewCount)
+            : null
+        : null
+    const topPositiveMetric = topPositiveTopicRow
+        ? createMetric({
+              value: topPositiveCurrentRate,
+              previousValue: topPositivePreviousRate,
               sampleSize: input.current.reviewCount,
               previousSampleSize: input.previous.reviewCount,
           })
@@ -106,6 +126,17 @@ export function mapOverviewResponse(input: {
                       negativeReviewShare: calculateRate(topTopic.reviewCount, input.current.lowScoreCount),
                       sampleSize: input.current.reviewCount,
                       status: topTopicMetric.status,
+                  }
+                : null,
+        topPositiveTopic:
+            topPositiveTopicRow && topPositiveMetric && topPositiveCurrentRate !== null
+                ? {
+                      topic: topPositiveTopicRow.topic,
+                      positiveMentionRate: topPositiveCurrentRate,
+                      previousMentionRate: topPositivePreviousRate,
+                      momentumPercentagePoints: topPositiveMetric.delta,
+                      sampleSize: input.current.reviewCount,
+                      status: topPositiveMetric.status,
                   }
                 : null,
         freshness: {

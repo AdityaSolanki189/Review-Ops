@@ -1,19 +1,25 @@
 'use client'
 
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { QueryState } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { buildScopeQueryString, scopeComparisonLabel } from '@/lib/dashboard-scope'
+import { resolveScopeFromSearchParams } from '@/lib/dashboard-scope'
 import { usePropertiesPerformanceQuery } from '@/lib/queries/properties.queries'
 
 export function PropertiesView() {
+    const searchParams = useSearchParams()
+    const scope = resolveScopeFromSearchParams(searchParams)
     const query = usePropertiesPerformanceQuery()
 
     return (
         <div className="space-y-8">
             <div>
                 <p className="text-muted-foreground">Performance across the four Azzurro Sydney properties</p>
+                <p className="mt-1 text-sm text-muted-foreground">{scopeComparisonLabel(scope)}</p>
             </div>
 
             <QueryState
@@ -49,8 +55,8 @@ export function PropertiesView() {
                                         {row.reviewCount} reviews this week · {row.totalReviews} total collected
                                     </p>
                                     <Link
-                                        href={`/properties/${row.property.slug}`}
-                                        className="text-sm font-medium text-primary hover:underline"
+                                        href={`/properties/${row.property.slug}?${buildScopeQueryString(scope)}`}
+                                        className="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
                                     >
                                         View property details
                                     </Link>

@@ -112,6 +112,112 @@ export function ReviewCard({
     )
 }
 
+export function MetricCard({
+    title,
+    value,
+    subtitle,
+    delta,
+    deltaSuffix = '',
+    insufficient,
+}: {
+    title: string
+    value: string
+    subtitle?: string
+    delta?: number | null
+    deltaSuffix?: string
+    insufficient?: boolean
+}) {
+    const showDelta = delta !== null && delta !== undefined && !insufficient
+
+    return (
+        <Card>
+            <CardContent className="space-y-3 pt-6">
+                <p className="text-sm font-medium text-muted-foreground">{title}</p>
+                <div className="flex items-end justify-between gap-4">
+                    <div>
+                        <p className="font-mono text-3xl font-semibold tabular-nums tracking-tight">{value}</p>
+                        {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+                    </div>
+                    {showDelta ? (
+                        <Badge
+                            variant={delta > 0 ? 'default' : delta < 0 ? 'destructive' : 'outline'}
+                            className="font-mono tabular-nums"
+                        >
+                            {delta >= 0 ? '+' : ''}
+                            {delta.toFixed(1)}
+                            {deltaSuffix}
+                        </Badge>
+                    ) : insufficient ? (
+                        <Badge variant="outline" className="text-xs">
+                            Not enough data
+                        </Badge>
+                    ) : null}
+                </div>
+            </CardContent>
+        </Card>
+    )
+}
+
+export function PortfolioStatusStrip({
+    signals,
+}: {
+    signals: Array<{ kind: string; label: string; value: string; detail?: string; insufficient?: boolean }>
+}) {
+    if (signals.length === 0) return null
+
+    return (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {signals.map((signal) => (
+                <div key={`${signal.kind}-${signal.label}`} className="rounded-lg border bg-card px-4 py-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{signal.label}</p>
+                    <p className="mt-1 font-semibold tracking-tight">{signal.value}</p>
+                    {signal.detail ? <p className="mt-1 text-sm text-muted-foreground">{signal.detail}</p> : null}
+                </div>
+            ))}
+        </div>
+    )
+}
+
+export function FreshnessStrip({
+    latestReviewAt,
+    latestScrapedAt,
+    sources,
+    classificationCoverage,
+}: {
+    latestReviewAt: string | null
+    latestScrapedAt: string | null
+    sources: string[]
+    classificationCoverage: number | null
+}) {
+    const reviewLabel = latestReviewAt
+        ? new Date(latestReviewAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+        : 'None'
+    const scrapedLabel = latestScrapedAt
+        ? new Date(latestScrapedAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })
+        : 'Unknown'
+
+    return (
+        <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+            <span>
+                Latest review: <strong className="text-foreground">{reviewLabel}</strong>
+            </span>
+            <span>
+                Last scrape: <strong className="text-foreground">{scrapedLabel}</strong>
+            </span>
+            <span>
+                Source: <strong className="text-foreground">{sources.join(', ') || 'booking.com'}</strong>
+            </span>
+            <span>
+                Classification:{' '}
+                <strong className="text-foreground">
+                    {classificationCoverage === null ? 'n/a' : `${classificationCoverage.toFixed(0)}%`}
+                </strong>
+            </span>
+        </div>
+    )
+}
+
+/** @deprecated Use MetricCard */
 export function StatCard({
     title,
     value,

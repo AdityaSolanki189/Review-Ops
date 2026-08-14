@@ -1,94 +1,173 @@
 import { generateText, Output } from 'ai'
 import { z } from 'zod'
-import { getNegativeTopicTrends, getPropertyPerformance, getWeeklyStats } from '@/db/queries/analytics'
+import { getDashboardIssues, getDashboardOverview } from '@/db/queries/dashboard-analytics'
 import { cachedQuery } from '@/lib/cache/cached'
 import { getOpenRouterModel } from '@/lib/ai/openrouter'
-import { isOpenRouterConfigured } from '@/lib/config/env'
+import { defaultAnalyticsScope } from '@/lib/dashboard-scope'
+import { resolveAnalyticsScope, type AnalyticsScope } from '@/lib/analytics'
 import { formatTopicLabel } from '@/lib/classification/topics'
+import { buildPortfolioStatus, isAnomalyIssue } from '@/lib/dashboard-status'
+import { shortPropertyName } from '@/lib/dashboard-scope'
+import { isOpenRouterConfigured } from '@/lib/config/env'
 
 const briefingSchema = z.object({
-    summary: z.string().describe('Three sentences summarizing this week for hotel ops managers.'),
-    actions: z.array(z.string()).max(4).describe('Concrete follow-up actions for the hotel team.'),
+    summary: z.string().describe('Two or three sentences summarizing portfolio review trends.'),
+    actions: z.array(z.string()).max(3).describe('Concrete follow-up actions for hotel operations.'),
 })
 
-export type WeeklyBriefingResult =
+export type PortfolioBriefingResult =
     | {
           available: true
           summary: string
           actions: string[]
+          source: 'deterministic' | 'ai'
       }
     | {
           available: false
           message: string
       }
 
-function startOfWeek(date: Date): Date {
-    const d = new Date(date)
-    const day = d.getDay()
-    const diff = day === 0 ? -6 : 1 - day
-    d.setDate(d.getDate() + diff)
-    d.setHours(0, 0, 0, 0)
-    return d
-}
-
-async function buildWeeklyBriefing(referenceDate = new Date()): Promise<WeeklyBriefingResult> {
-    if (!isOpenRouterConfigured()) {
+export function buildDeterministicBriefing(
+    overview: Awaited<ReturnType<typeof getDashboardOverview>>,
+    issues: Awaited<ReturnType<typeof getDashboardIssues>>,
+): PortfolioBriefingResult {
+    if (overview.reviewActivity.sampleSize === 0) {
         return {
             available: false,
-            message: 'Weekly AI briefing needs OPENROUTER_API_KEY in your environment.',
+            message: 'No reviews in this period. Widen the date range or run a sync after new guest feedback arrives.',
         }
     }
 
-    const [weeklyStats, propertyPerformance, topicTrends] = await Promise.all([
-        getWeeklyStats(referenceDate),
-        getPropertyPerformance(referenceDate),
-        getNegativeTopicTrends(referenceDate),
-    ])
+    const statusSignals = buildPortfolioStatus(overview, issues.issues)
+    const overall = statusSignals.find((signal) => signal.kind === 'overall')
+    const attention = statusSignals.find((signal) => signal.kind === 'attention')
+    const improvement = statusSignals.find((signal) => signal.kind === 'improvement')
+    const complaint = statusSignals.find((signal) => signal.kind === 'complaint')
+    const anomaly = issues.issues.find(isAnomalyIssue)
 
-    if (weeklyStats.thisWeek.reviewCount === 0) {
-        return {
-            available: false,
-            message: 'No reviews this week yet. Run a sync after new guest feedback arrives.',
-        }
-    }
-
-    const propertyLines = propertyPerformance
-        .filter((row) => row.reviewCount > 0)
-        .map(
-            (row) =>
-                `${row.property.name}: ${row.avgRating.toFixed(1)} avg (${row.delta >= 0 ? '+' : ''}${row.delta.toFixed(1)} vs last week, ${row.reviewCount} reviews)`,
+    const summaryParts: string[] = []
+    if (overall?.value !== 'No reviews') {
+        summaryParts.push(
+            `Portfolio average rating is ${overall?.value}${overall?.detail ? ` (${overall.detail})` : ''}.`,
         )
-        .join('\n')
+    }
+    if (attention) {
+        summaryParts.push(
+            `${attention.value} needs attention with a rating of ${attention.detail?.split(' ')[0] ?? 'below portfolio average'}.`,
+        )
+    }
+    if (improvement) {
+        summaryParts.push(`${improvement.value} improved ${improvement.detail ?? 'this period'}.`)
+    }
+    if (complaint) {
+        summaryParts.push(
+            `${complaint.value} is the leading operational concern (${complaint.detail ?? 'negative mentions rising'}).`,
+        )
+    }
+    if (anomaly) {
+        summaryParts.push(
+            `${formatTopicLabel(anomaly.topic)} complaints spiked at ${anomaly.propertySlug.replace(/-/g, ' ')}.`,
+        )
+    }
 
-    const topicLines = topicTrends
-        .slice(0, 5)
-        .map((row) => `${formatTopicLabel(row.topic)}: ${row.count} mentions (${row.percentage}%)`)
-        .join('\n')
-
-    const prompt = [
-        `Portfolio average this week: ${weeklyStats.thisWeek.avgRating.toFixed(1)} (${weeklyStats.thisWeek.reviewCount} reviews)`,
-        `Last week average: ${weeklyStats.lastWeek.avgRating.toFixed(1)} (${weeklyStats.lastWeek.reviewCount} reviews)`,
-        'Property performance:',
-        propertyLines || 'No property-level reviews this week.',
-        'Top negative topics:',
-        topicLines || 'No negative topics this week.',
-    ].join('\n')
-
-    const result = await generateText({
-        model: getOpenRouterModel(),
-        system: 'You write concise weekly review briefings for Azzurro Hotels Sydney operations managers. Focus on what changed, what is hurting scores, and what to do next.',
-        prompt,
-        output: Output.object({ schema: briefingSchema }),
-    })
+    const actions: string[] = []
+    if (attention) {
+        actions.push(`Review negative feedback for ${attention.value} in the Review Feed.`)
+    }
+    if (complaint && overview.topNegativeTopic) {
+        actions.push(
+            `Investigate ${formatTopicLabel(overview.topNegativeTopic.topic)} mentions across affected properties.`,
+        )
+    }
+    if (overview.lowScoreRate.value !== null && overview.lowScoreRate.value > 20) {
+        actions.push(
+            `Low-score rate is ${overview.lowScoreRate.value.toFixed(1)}%. Prioritize follow-up on ratings ≤5.`,
+        )
+    }
+    if (actions.length === 0 && improvement) {
+        actions.push(`Document what is working at ${improvement.value} and share across properties.`)
+    }
 
     return {
         available: true,
-        summary: result.output.summary,
-        actions: result.output.actions,
+        summary: summaryParts.join(' ').trim() || 'Review activity is stable for the selected period.',
+        actions: actions.slice(0, 3),
+        source: 'deterministic',
     }
 }
 
-export async function getWeeklyBriefing(referenceDate = new Date()): Promise<WeeklyBriefingResult> {
-    const weekKey = startOfWeek(referenceDate).toISOString().slice(0, 10)
-    return cachedQuery(`briefing:${weekKey}`, 3600, () => buildWeeklyBriefing(referenceDate))
+async function maybeEnhanceWithAi(
+    deterministic: Extract<PortfolioBriefingResult, { available: true }>,
+    overview: Awaited<ReturnType<typeof getDashboardOverview>>,
+    issues: Awaited<ReturnType<typeof getDashboardIssues>>,
+): Promise<PortfolioBriefingResult> {
+    if (!isOpenRouterConfigured()) return deterministic
+
+    const propertyLines = overview.propertyComparison
+        .filter((row) => row.reviewActivity.sampleSize > 0 && row.averageRating.value !== null)
+        .map(
+            (row) =>
+                `${shortPropertyName(row.property.name)}: ${row.averageRating.value?.toFixed(1)} (${row.averageRating.delta !== null ? `${row.averageRating.delta >= 0 ? '+' : ''}${row.averageRating.delta.toFixed(1)}` : 'n/a'} vs prior, ${row.reviewActivity.sampleSize} reviews)`,
+        )
+        .join('\n')
+
+    const issueLines = issues.issues
+        .slice(0, 5)
+        .map(
+            (issue) =>
+                `${issue.propertySlug}/${issue.topic}: ${issue.negativeMentionRate.toFixed(1)}% negative mentions (${issue.momentumPercentagePoints !== null ? `${issue.momentumPercentagePoints >= 0 ? '+' : ''}${issue.momentumPercentagePoints.toFixed(1)} pp` : 'insufficient prior data'})`,
+        )
+        .join('\n')
+
+    const prompt = [
+        `Period: ${overview.scope.from} to ${overview.scope.to}`,
+        `Average rating: ${overview.averageRating.value?.toFixed(1) ?? 'n/a'} (${overview.averageRating.delta !== null ? `${overview.averageRating.delta >= 0 ? '+' : ''}${overview.averageRating.delta.toFixed(1)} vs prior` : 'insufficient prior data'})`,
+        `Review count: ${overview.reviewActivity.sampleSize}`,
+        `Low-score rate: ${overview.lowScoreRate.value?.toFixed(1) ?? 'n/a'}%`,
+        'Property comparison:',
+        propertyLines || 'No property data.',
+        'Top issue momentum:',
+        issueLines || 'No negative topic spikes.',
+        'Draft briefing to refine:',
+        deterministic.summary,
+        'Draft actions:',
+        deterministic.actions.join('; ') || 'None',
+    ].join('\n')
+
+    try {
+        const result = await generateText({
+            model: getOpenRouterModel(),
+            system: 'You write concise operational briefings for Azzurro Hotels Sydney managers. Use only the supplied metrics. Do not invent guest quotes or identities.',
+            prompt,
+            output: Output.object({ schema: briefingSchema }),
+        })
+
+        return {
+            available: true,
+            summary: result.output.summary,
+            actions: result.output.actions,
+            source: 'ai',
+        }
+    } catch {
+        return deterministic
+    }
+}
+
+async function buildPortfolioBriefing(scope: AnalyticsScope): Promise<PortfolioBriefingResult> {
+    const resolved = resolveAnalyticsScope(scope)
+    const [overview, issues] = await Promise.all([getDashboardOverview(resolved), getDashboardIssues(resolved)])
+    const deterministic = buildDeterministicBriefing(overview, issues)
+    if (!deterministic.available) return deterministic
+    return maybeEnhanceWithAi(deterministic, overview, issues)
+}
+
+export async function getPortfolioBriefing(scope?: AnalyticsScope): Promise<PortfolioBriefingResult> {
+    const resolvedScope = resolveAnalyticsScope(scope ?? defaultAnalyticsScope())
+    const cacheKey = `briefing:${resolvedScope.public.propertySlug ?? 'all'}:${resolvedScope.public.from}:${resolvedScope.public.to}`
+    return cachedQuery(cacheKey, 3600, () => buildPortfolioBriefing(resolvedScope.public))
+}
+
+/** @deprecated Use getPortfolioBriefing with scope instead */
+export async function getWeeklyBriefing(_referenceDate = new Date()): Promise<PortfolioBriefingResult> {
+    return getPortfolioBriefing()
 }

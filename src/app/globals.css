@@ -45,6 +45,7 @@
 
 :root {
     --radius: 0.625rem;
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --background: oklch(0.99 0.006 240);
     --foreground: oklch(0.18 0.02 240);
     --card: oklch(0.995 0.004 240);
@@ -118,6 +119,17 @@
     }
     body {
         @apply bg-background text-foreground;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
     }
 }
 

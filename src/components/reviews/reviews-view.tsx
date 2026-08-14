@@ -71,23 +71,39 @@ export function ReviewsView() {
     return (
         <div className="space-y-8">
             <div>
-                <p className="text-sm text-muted-foreground">Filter and inspect collected Booking.com reviews</p>
+                <p className="text-sm text-muted-foreground">Browse and filter individual guest reviews</p>
             </div>
 
             {propertiesQuery.data ? <ReviewFiltersForm properties={propertiesQuery.data} params={params} /> : null}
 
             {activeFilters.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Active filters:</span>
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
+                    <span className="font-medium text-foreground">Active filters</span>
                     {activeFilters.map(([key, value]) => (
-                        <a key={key} href={withoutFilter(key)} className="rounded-full border px-2 py-1 hover:bg-muted">
+                        <a
+                            key={key}
+                            href={withoutFilter(key)}
+                            className="inline-flex min-h-11 items-center rounded-full border bg-background px-3 py-1.5 hover:bg-muted"
+                        >
                             {key}: {value} ×
                         </a>
                     ))}
-                    <a href="/reviews" className="text-primary underline-offset-4 hover:underline">
+                    <a
+                        href="/reviews"
+                        className="inline-flex min-h-11 items-center px-2 text-primary underline-offset-4 hover:underline"
+                    >
                         Clear all
                     </a>
                 </div>
+            ) : null}
+
+            {!isLoading && reviewsQuery.data ? (
+                <p className="text-sm font-medium">
+                    {reviews.length === 0 && pages.length === 0
+                        ? '0 reviews found'
+                        : `${pages.reduce((sum, page) => sum + page.items.length, 0) || reviews.length} reviews on this page`}
+                    {activeFilters.length > 0 ? ' matching filters' : ''}
+                </p>
             ) : null}
 
             <QueryState

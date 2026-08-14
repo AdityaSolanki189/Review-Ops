@@ -150,7 +150,7 @@ export function ReviewFiltersForm({ properties, params, onSubmit }: ReviewFilter
             <div className="flex items-end md:col-span-3 xl:col-span-4">
                 <button
                     type="submit"
-                    className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform duration-150 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+                    className="inline-flex h-11 min-h-11 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-[transform,background-color] duration-150 ease-[var(--ease-out)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
                 >
                     Apply filters
                 </button>
