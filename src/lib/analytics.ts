@@ -1,43 +1,48 @@
-import { PROPERTY_SEEDS } from '@/lib/properties'
+import type { ReviewTopicKey } from '@/lib/classification/topics'
 
 export const ANALYTICS_TIMEZONE = 'Australia/Sydney'
 export const DEFAULT_SCOPE_DAYS = 30
-export const MAX_SCOPE_DAYS = 366
 export const MIN_COMPARISON_SAMPLE_SIZE = 5
 
-export type MetricStatus = 'ok' | 'no_data' | 'insufficient_data'
+export type MetricStatus = 'available' | 'insufficient_data' | 'stale'
+
+export interface AnalyticsScope {
+    propertySlug?: string
+    from: string
+    to: string
+    compare: 'previous-period'
+    timezone: typeof ANALYTICS_TIMEZONE
+}
+
+export interface Metric<T> {
+    value: T | null
+    previousValue: T | null
+    delta: number | null
+    sampleSize: number
+    status: MetricStatus
+}
+
+export interface IssueSignal {
+    propertySlug: string
+    topic: ReviewTopicKey
+    negativeMentionRate: number
+    previousMentionRate: number | null
+    momentumPercentagePoints: number | null
+    ratingGap: number | null
+    sampleSize: number
+    latestReviewAt: string | null
+    status: Metric<unknown>['status']
+}
 
 export interface AnalyticsPeriod {
     from: Date
     to: Date
 }
 
-export interface AnalyticsScope extends AnalyticsPeriod {
-    property: string | null
-    timezone: typeof ANALYTICS_TIMEZONE
-    compare: 'previous-period'
+export interface ResolvedAnalyticsScope extends AnalyticsPeriod {
+    public: AnalyticsScope
+    propertySlug?: string
     previous: AnalyticsPeriod
-}
-
-export interface Metric<T> {
-    value: T | null
-    previous: T | null
-    delta: number | null
-    status: MetricStatus
-    sampleSize: number
-    previousSampleSize: number
-}
-
-export interface IssueSignal {
-    property: { slug: string; name: string }
-    topic: string
-    currentRate: number | null
-    previousRate: number | null
-    momentum: number | null
-    ratingGap: number | null
-    sampleSize: number
-    latestReviewAt: Date | null
-    status: MetricStatus
 }
 
 export type ScopeParseResult = { ok: true; value: AnalyticsScope } | { ok: false; error: string }
@@ -117,15 +122,12 @@ export function getPreviousPeriod(period: AnalyticsPeriod): AnalyticsPeriod {
 }
 
 export function parseAnalyticsScope(searchParams: URLSearchParams, now = new Date()): ScopeParseResult {
-    const property = searchParams.get('property')
+    const propertySlug = searchParams.get('property') || undefined
     const fromParam = searchParams.get('from')
     const toParam = searchParams.get('to')
     const compare = searchParams.get('compare') ?? 'previous-period'
     const timezone = searchParams.get('timezone') ?? ANALYTICS_TIMEZONE
 
-    if (property && !PROPERTY_SEEDS.some((item) => item.slug === property)) {
-        return { ok: false, error: 'Unknown property.' }
-    }
     if (compare !== 'previous-period') return { ok: false, error: 'Unsupported comparison.' }
     if (timezone !== ANALYTICS_TIMEZONE) return { ok: false, error: 'Unsupported timezone.' }
     if ((fromParam && !toParam) || (!fromParam && toParam)) {
@@ -133,26 +135,37 @@ export function parseAnalyticsScope(searchParams: URLSearchParams, now = new Dat
     }
 
     const today = formatSydneyDate(now)
-    const fromDate = fromParam ?? addCalendarDays(today, -DEFAULT_SCOPE_DAYS)
-    const toDate = toParam ?? today
-    const parsedFrom = parseDateOnly(fromDate)
-    const parsedTo = parseDateOnly(toDate)
+    const from = fromParam ?? addCalendarDays(today, -DEFAULT_SCOPE_DAYS)
+    const to = toParam ?? today
+    const parsedFrom = parseDateOnly(from)
+    const parsedTo = parseDateOnly(to)
     if (!parsedFrom || !parsedTo) return { ok: false, error: 'Dates must use YYYY-MM-DD.' }
 
-    const calendarDays = (Date.parse(`${toDate}T00:00:00Z`) - Date.parse(`${fromDate}T00:00:00Z`)) / 86_400_000
+    const calendarDays = (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000
     if (calendarDays <= 0) return { ok: false, error: 'The date range must not be empty or inverted.' }
-    if (calendarDays > MAX_SCOPE_DAYS) return { ok: false, error: 'The date range is too long.' }
 
-    const period = { from: sydneyDateStartToUtc(fromDate), to: sydneyDateStartToUtc(toDate) }
     return {
         ok: true,
         value: {
-            ...period,
-            property: property ?? null,
-            timezone: ANALYTICS_TIMEZONE,
+            ...(propertySlug ? { propertySlug } : {}),
+            from,
+            to,
             compare: 'previous-period',
-            previous: getPreviousPeriod(period),
+            timezone: ANALYTICS_TIMEZONE,
         },
+    }
+}
+
+export function resolveAnalyticsScope(scope: AnalyticsScope): ResolvedAnalyticsScope {
+    const period = {
+        from: sydneyDateStartToUtc(scope.from),
+        to: sydneyDateStartToUtc(scope.to),
+    }
+    return {
+        public: scope,
+        ...(scope.propertySlug ? { propertySlug: scope.propertySlug } : {}),
+        ...period,
+        previous: getPreviousPeriod(period),
     }
 }
 
@@ -161,36 +174,37 @@ export function calculateRate(numerator: number, denominator: number): number | 
     return (numerator / denominator) * 100
 }
 
+export function calculateRatingGap(topicAverage: number | null, scopeAverage: number | null): number | null {
+    return topicAverage === null || scopeAverage === null ? null : topicAverage - scopeAverage
+}
+
 export function getSeriesGranularity(calendarDays: number): 'day' | 'week' {
     return calendarDays <= 90 ? 'day' : 'week'
 }
 
 export function createMetric<T>(input: {
     value: T | null
-    previous: T | null
+    previousValue: T | null
     sampleSize: number
     previousSampleSize: number
     delta?: number | null
+    stale?: boolean
 }): Metric<T> {
-    const hasValue = input.value !== null
-    const hasComparison = input.previous !== null
     const enoughData =
-        input.sampleSize >= MIN_COMPARISON_SAMPLE_SIZE && input.previousSampleSize >= MIN_COMPARISON_SAMPLE_SIZE
+        input.value !== null &&
+        input.previousValue !== null &&
+        input.sampleSize >= MIN_COMPARISON_SAMPLE_SIZE &&
+        input.previousSampleSize >= MIN_COMPARISON_SAMPLE_SIZE
     const delta =
-        hasComparison && enoughData
-            ? (input.delta ??
-              (typeof input.value === 'number' && typeof input.previous === 'number'
-                  ? input.value - input.previous
-                  : null))
+        enoughData && typeof input.value === 'number' && typeof input.previousValue === 'number'
+            ? (input.delta ?? input.value - input.previousValue)
             : null
 
     return {
         value: input.value,
-        previous: input.previous,
+        previousValue: input.previousValue,
         delta,
-        status:
-            !hasValue || input.sampleSize === 0 ? 'no_data' : hasComparison && !enoughData ? 'insufficient_data' : 'ok',
         sampleSize: input.sampleSize,
-        previousSampleSize: input.previousSampleSize,
+        status: input.stale ? 'stale' : enoughData ? 'available' : 'insufficient_data',
     }
 }

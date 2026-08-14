@@ -2,23 +2,16 @@ import { and, asc, count, desc, eq, gte, lt, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { properties, reviews, reviewTopics } from '@/db/schema'
 import { cachedQuery } from '@/lib/cache/cached'
-import {
-    calculateRate,
-    createMetric,
-    getSeriesGranularity,
-    type AnalyticsPeriod,
-    type AnalyticsScope,
-    type IssueSignal,
-} from '@/lib/analytics'
-import { TOPIC_KEYWORDS, type ReviewTopicKey } from '@/lib/classification/topics'
+import { getSeriesGranularity, type AnalyticsPeriod, type ResolvedAnalyticsScope } from '@/lib/analytics'
+import { mapIssueSignals, mapOverviewResponse, mapTopicMatrixResponse } from '@/lib/dashboard-analytics'
 
 const DASHBOARD_CACHE_TTL = 300
 
-function scopeConditions(scope: AnalyticsScope, period: AnalyticsPeriod) {
+function scopeConditions(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
     return and(
         gte(reviews.reviewDate, period.from),
         lt(reviews.reviewDate, period.to),
-        scope.property ? eq(properties.slug, scope.property) : undefined,
+        scope.propertySlug ? eq(properties.slug, scope.propertySlug) : undefined,
     )
 }
 
@@ -26,11 +19,11 @@ function number(value: unknown): number {
     return Number(value ?? 0)
 }
 
-function scopeCacheKey(name: string, scope: AnalyticsScope): string {
-    return `${name}:${scope.property ?? 'all'}:${scope.from.toISOString()}:${scope.to.toISOString()}`
+function scopeCacheKey(name: string, scope: ResolvedAnalyticsScope): string {
+    return `${name}:${scope.propertySlug ?? 'all'}:${scope.public.from}:${scope.public.to}`
 }
 
-async function getPeriodSummary(scope: AnalyticsScope, period: AnalyticsPeriod) {
+async function getPeriodSummary(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
     const [summary] = await db
         .select({
             averageRating: sql<number | null>`avg(${reviews.ratingNumeric})`,
@@ -57,7 +50,7 @@ async function getPeriodSummary(scope: AnalyticsScope, period: AnalyticsPeriod) 
     }
 }
 
-async function getClassifiedReviewCount(scope: AnalyticsScope, period: AnalyticsPeriod): Promise<number> {
+async function getClassifiedReviewCount(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod): Promise<number> {
     const [row] = await db
         .select({ count: sql<number>`count(distinct ${reviewTopics.reviewId})` })
         .from(reviews)
@@ -67,8 +60,8 @@ async function getClassifiedReviewCount(scope: AnalyticsScope, period: Analytics
     return number(row?.count)
 }
 
-async function getNegativeTopics(scope: AnalyticsScope, period: AnalyticsPeriod) {
-    return db
+async function getNegativeTopics(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+    const rows = await db
         .select({
             topic: reviewTopics.topic,
             reviewCount: sql<number>`count(distinct ${reviewTopics.reviewId})`,
@@ -79,10 +72,12 @@ async function getNegativeTopics(scope: AnalyticsScope, period: AnalyticsPeriod)
         .where(and(scopeConditions(scope, period), eq(reviewTopics.sentiment, 'negative')))
         .groupBy(reviewTopics.topic)
         .orderBy(desc(sql`count(distinct ${reviewTopics.reviewId})`))
+
+    return rows.map((row) => ({ ...row, reviewCount: number(row.reviewCount) }))
 }
 
-async function getPropertySummaries(scope: AnalyticsScope, period: AnalyticsPeriod) {
-    return db
+async function getPropertySummaries(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+    const rows = await db
         .select({
             slug: properties.slug,
             name: properties.name,
@@ -95,111 +90,64 @@ async function getPropertySummaries(scope: AnalyticsScope, period: AnalyticsPeri
         .where(scopeConditions(scope, period))
         .groupBy(properties.slug, properties.name)
         .orderBy(asc(properties.name))
+
+    return rows.map((row) => ({
+        ...row,
+        averageRating: row.averageRating === null ? null : number(row.averageRating),
+        reviewCount: number(row.reviewCount),
+        lowScoreCount: number(row.lowScoreCount),
+    }))
 }
 
-export async function getDashboardOverview(scope: AnalyticsScope) {
+async function getScopedProperties(scope: ResolvedAnalyticsScope) {
+    return db
+        .select({ slug: properties.slug, name: properties.name })
+        .from(properties)
+        .where(scope.propertySlug ? eq(properties.slug, scope.propertySlug) : undefined)
+        .orderBy(asc(properties.name))
+}
+
+export async function getDashboardOverview(scope: ResolvedAnalyticsScope) {
     return cachedQuery(scopeCacheKey('dashboard:overview', scope), DASHBOARD_CACHE_TTL, async () => {
         const [
+            propertyRows,
             current,
             previous,
             classifiedCurrent,
             classifiedPrevious,
             currentTopics,
+            previousTopics,
             propertyCurrent,
             propertyPrevious,
         ] = await Promise.all([
+            getScopedProperties(scope),
             getPeriodSummary(scope, scope),
             getPeriodSummary(scope, scope.previous),
             getClassifiedReviewCount(scope, scope),
             getClassifiedReviewCount(scope, scope.previous),
             getNegativeTopics(scope, scope),
+            getNegativeTopics(scope, scope.previous),
             getPropertySummaries(scope, scope),
             getPropertySummaries(scope, scope.previous),
         ])
 
-        const previousByProperty = new Map(propertyPrevious.map((row) => [row.slug, row]))
-        const topTopic = currentTopics[0]
-        const lowScoreRate = calculateRate(current.lowScoreCount, current.reviewCount)
-        const previousLowScoreRate = calculateRate(previous.lowScoreCount, previous.reviewCount)
-        const classificationCoverage = calculateRate(classifiedCurrent, current.reviewCount)
-        const previousClassificationCoverage = calculateRate(classifiedPrevious, previous.reviewCount)
-
-        return {
+        return mapOverviewResponse({
             scope,
-            averageRating: createMetric({
-                value: current.averageRating,
-                previous: previous.averageRating,
-                sampleSize: current.reviewCount,
-                previousSampleSize: previous.reviewCount,
-            }),
-            reviewActivity: createMetric({
-                value: current.reviewCount,
-                previous: previous.reviewCount,
-                sampleSize: current.reviewCount,
-                previousSampleSize: previous.reviewCount,
-            }),
-            lowScoreRate: createMetric({
-                value: lowScoreRate,
-                previous: previousLowScoreRate,
-                sampleSize: current.reviewCount,
-                previousSampleSize: previous.reviewCount,
-            }),
-            topNegativeTopic: topTopic
-                ? {
-                      topic: topTopic.topic,
-                      negativeMentionRate: calculateRate(number(topTopic.reviewCount), current.reviewCount),
-                      negativeReviewShare: calculateRate(number(topTopic.reviewCount), current.lowScoreCount),
-                      reviewCount: number(topTopic.reviewCount),
-                  }
-                : null,
-            freshness: {
-                latestReviewAt: current.latestReviewAt,
-                latestScrapedAt: current.latestScrapedAt,
-                sources: current.sources,
-            },
-            classificationCoverage: createMetric({
-                value: classificationCoverage,
-                previous: previousClassificationCoverage,
-                sampleSize: current.reviewCount,
-                previousSampleSize: previous.reviewCount,
-            }),
-            propertyComparison: propertyCurrent.map((row) => {
-                const previousRow = previousByProperty.get(row.slug)
-                const currentReviewCount = number(row.reviewCount)
-                const previousReviewCount = number(previousRow?.reviewCount)
-                return {
-                    property: { slug: row.slug, name: row.name },
-                    averageRating: createMetric({
-                        value: row.averageRating === null ? null : number(row.averageRating),
-                        previous:
-                            previousRow?.averageRating === null || previousRow?.averageRating === undefined
-                                ? null
-                                : number(previousRow.averageRating),
-                        sampleSize: currentReviewCount,
-                        previousSampleSize: previousReviewCount,
-                    }),
-                    reviewActivity: createMetric({
-                        value: currentReviewCount,
-                        previous: previousRow ? previousReviewCount : null,
-                        sampleSize: currentReviewCount,
-                        previousSampleSize: previousReviewCount,
-                    }),
-                    lowScoreRate: createMetric({
-                        value: calculateRate(number(row.lowScoreCount), currentReviewCount),
-                        previous: previousRow
-                            ? calculateRate(number(previousRow.lowScoreCount), previousReviewCount)
-                            : null,
-                        sampleSize: currentReviewCount,
-                        previousSampleSize: previousReviewCount,
-                    }),
-                }
-            }),
-        }
+            properties: propertyRows,
+            current,
+            previous,
+            classifiedCurrent,
+            classifiedPrevious,
+            currentTopics,
+            previousTopics,
+            propertyCurrent,
+            propertyPrevious,
+        })
     })
 }
 
-async function getIssueRows(scope: AnalyticsScope, period: AnalyticsPeriod) {
-    return db
+async function getIssueRows(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+    const rows = await db
         .select({
             slug: properties.slug,
             name: properties.name,
@@ -213,75 +161,64 @@ async function getIssueRows(scope: AnalyticsScope, period: AnalyticsPeriod) {
         .innerJoin(properties, eq(properties.id, reviews.propertyId))
         .where(and(scopeConditions(scope, period), eq(reviewTopics.sentiment, 'negative')))
         .groupBy(properties.slug, properties.name, reviewTopics.topic)
+
+    return rows.map((row) => ({
+        ...row,
+        reviewCount: number(row.reviewCount),
+        averageRating: row.averageRating === null ? null : number(row.averageRating),
+    }))
 }
 
-export async function getDashboardIssues(scope: AnalyticsScope) {
+export async function getDashboardIssues(scope: ResolvedAnalyticsScope) {
     return cachedQuery(scopeCacheKey('dashboard:issues', scope), DASHBOARD_CACHE_TTL, async () => {
-        const [currentIssues, previousIssues, currentProperties, previousProperties] = await Promise.all([
-            getIssueRows(scope, scope),
-            getIssueRows(scope, scope.previous),
-            getPropertySummaries(scope, scope),
-            getPropertySummaries(scope, scope.previous),
-        ])
-        const previousIssueByKey = new Map(previousIssues.map((row) => [`${row.slug}:${row.topic}`, row]))
-        const currentPropertyBySlug = new Map(currentProperties.map((row) => [row.slug, row]))
-        const previousPropertyBySlug = new Map(previousProperties.map((row) => [row.slug, row]))
-
-        const issues: IssueSignal[] = currentIssues.map((row) => {
-            const previous = previousIssueByKey.get(`${row.slug}:${row.topic}`)
-            const property = currentPropertyBySlug.get(row.slug)
-            const previousProperty = previousPropertyBySlug.get(row.slug)
-            const sampleSize = number(property?.reviewCount)
-            const previousSampleSize = number(previousProperty?.reviewCount)
-            const currentRate = calculateRate(number(row.reviewCount), sampleSize)
-            const previousRate = previous ? calculateRate(number(previous.reviewCount), previousSampleSize) : null
-            const metric = createMetric({
-                value: currentRate,
-                previous: previousRate,
-                sampleSize,
-                previousSampleSize,
-            })
-
-            return {
-                property: { slug: row.slug, name: row.name },
-                topic: row.topic,
-                currentRate,
-                previousRate,
-                momentum: metric.delta,
-                ratingGap:
-                    row.averageRating === null ||
-                    property?.averageRating === null ||
-                    property?.averageRating === undefined
-                        ? null
-                        : number(row.averageRating) - number(property.averageRating),
-                sampleSize,
-                latestReviewAt: row.latestReviewAt,
-                status: metric.status,
-            }
-        })
-
-        issues.sort(
-            (left, right) => (right.momentum ?? Number.NEGATIVE_INFINITY) - (left.momentum ?? Number.NEGATIVE_INFINITY),
-        )
-        return { scope, issues }
+        const [currentSummary, currentIssues, previousIssues, currentProperties, previousProperties] =
+            await Promise.all([
+                getPeriodSummary(scope, scope),
+                getIssueRows(scope, scope),
+                getIssueRows(scope, scope.previous),
+                getPropertySummaries(scope, scope),
+                getPropertySummaries(scope, scope.previous),
+            ])
+        return {
+            scope: scope.public,
+            issues: mapIssueSignals({
+                scope,
+                scopeAverageRating: currentSummary.averageRating,
+                currentIssues,
+                previousIssues,
+                currentProperties,
+                previousProperties,
+            }),
+        }
     })
 }
 
-export async function getDashboardTopicMatrix(scope: AnalyticsScope) {
+async function getPropertyClassificationCounts(scope: ResolvedAnalyticsScope) {
+    const rows = await db
+        .select({
+            slug: properties.slug,
+            reviewCount: sql<number>`count(distinct ${reviewTopics.reviewId})`,
+        })
+        .from(reviewTopics)
+        .innerJoin(reviews, eq(reviews.id, reviewTopics.reviewId))
+        .innerJoin(properties, eq(properties.id, reviews.propertyId))
+        .where(scopeConditions(scope, scope))
+        .groupBy(properties.slug)
+
+    return rows.map((row) => ({ ...row, reviewCount: number(row.reviewCount) }))
+}
+
+export async function getDashboardTopicMatrix(scope: ResolvedAnalyticsScope) {
     return cachedQuery(scopeCacheKey('dashboard:topic-matrix', scope), DASHBOARD_CACHE_TTL, async () => {
-        const [propertyRows, totals, topicRows] = await Promise.all([
-            db
-                .select({ slug: properties.slug, name: properties.name })
-                .from(properties)
-                .where(scope.property ? eq(properties.slug, scope.property) : undefined)
-                .orderBy(asc(properties.name)),
+        const [propertyRows, totals, classified, rawTopicRows] = await Promise.all([
+            getScopedProperties(scope),
             getPropertySummaries(scope, scope),
+            getPropertyClassificationCounts(scope),
             db
                 .select({
                     slug: properties.slug,
                     topic: reviewTopics.topic,
                     negativeReviewCount: sql<number>`count(distinct ${reviewTopics.reviewId}) filter (where ${reviewTopics.sentiment} = 'negative')`,
-                    classifiedReviewCount: sql<number>`count(distinct ${reviewTopics.reviewId})`,
                 })
                 .from(reviewTopics)
                 .innerJoin(reviews, eq(reviews.id, reviewTopics.reviewId))
@@ -289,39 +226,22 @@ export async function getDashboardTopicMatrix(scope: AnalyticsScope) {
                 .where(scopeConditions(scope, scope))
                 .groupBy(properties.slug, reviewTopics.topic),
         ])
-        const totalsByProperty = new Map(totals.map((row) => [row.slug, number(row.reviewCount)]))
-        const topicByProperty = new Map(topicRows.map((row) => [`${row.slug}:${row.topic}`, row]))
-        const topics = Object.keys(TOPIC_KEYWORDS) as ReviewTopicKey[]
+        const topicRows = rawTopicRows.map((row) => ({
+            ...row,
+            negativeReviewCount: number(row.negativeReviewCount),
+        }))
 
-        return {
+        return mapTopicMatrixResponse({
             scope,
-            topics,
-            rows: propertyRows.map((property) => {
-                const reviewCount = totalsByProperty.get(property.slug) ?? 0
-                return {
-                    property,
-                    reviewCount,
-                    cells: Object.fromEntries(
-                        topics.map((topic) => {
-                            const row = topicByProperty.get(`${property.slug}:${topic}`)
-                            const distinctReviewCount = number(row?.negativeReviewCount)
-                            return [
-                                topic,
-                                {
-                                    negativeMentionRate: calculateRate(distinctReviewCount, reviewCount),
-                                    distinctReviewCount,
-                                    coverage: calculateRate(number(row?.classifiedReviewCount), reviewCount),
-                                },
-                            ]
-                        }),
-                    ),
-                }
-            }),
-        }
+            properties: propertyRows,
+            totals,
+            classified,
+            topics: topicRows,
+        })
     })
 }
 
-export async function getDashboardSeries(scope: AnalyticsScope) {
+export async function getDashboardSeries(scope: ResolvedAnalyticsScope) {
     return cachedQuery(scopeCacheKey('dashboard:series', scope), DASHBOARD_CACHE_TTL, async () => {
         const calendarDays = Math.round((scope.to.getTime() - scope.from.getTime()) / 86_400_000)
         const granularity = getSeriesGranularity(calendarDays)
@@ -360,7 +280,7 @@ export async function getDashboardSeries(scope: AnalyticsScope) {
         ])
 
         return {
-            scope,
+            scope: scope.public,
             granularity,
             rating: seriesRows.map((row) => ({
                 bucket: row.bucket,
