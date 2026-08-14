@@ -1,0 +1,87 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.2.7/schema.json",
+    "vcs": {
+        "enabled": false,
+        "clientKind": "git",
+        "useIgnoreFile": false
+    },
+    "files": {
+        "ignoreUnknown": false,
+        "includes": [
+            "**",
+            "!node_modules",
+            "!.next",
+            "!build",
+            "!coverage",
+            "!src/db/migrations",
+            "!cspell.config.json",
+            "!.claude",
+            "!.github"
+        ]
+    },
+    "formatter": {
+        "enabled": true,
+        "formatWithErrors": false,
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineEnding": "lf",
+        "lineWidth": 120,
+        "attributePosition": "auto",
+        "bracketSameLine": false,
+        "bracketSpacing": true,
+        "expand": "auto",
+        "useEditorconfig": true,
+        "includes": [
+            "**",
+            "!build",
+            "!coverage",
+            "!src/db/migrations",
+            "!node_modules",
+            "!.next",
+            "!cspell.config.json",
+            "!.claude",
+            "!.github"
+        ]
+    },
+    "linter": {
+        "rules": {
+            "recommended": true,
+            "correctness": {
+                "noChildrenProp": "error",
+                "useExhaustiveDependencies": "warn",
+                "useHookAtTopLevel": "error",
+                "useJsxKeyInIterable": "error"
+            },
+            "security": { "noDangerouslySetInnerHtml": "off" },
+            "suspicious": {
+                "noCommentText": "error",
+                "noDuplicateJsxProps": "error",
+                "noArrayIndexKey": "off",
+                "noUnknownAtRules": "off"
+            },
+            "a11y": { "noStaticElementInteractions": "off" }
+        }
+    },
+    "assist": {
+        "enabled": true,
+        "actions": {
+            "source": {
+                "organizeImports": "off"
+            }
+        }
+    },
+    "javascript": {
+        "formatter": {
+            "jsxQuoteStyle": "double",
+            "quoteProperties": "asNeeded",
+            "trailingCommas": "all",
+            "semicolons": "asNeeded",
+            "arrowParentheses": "always",
+            "bracketSpacing": true,
+            "bracketSameLine": false,
+            "quoteStyle": "single",
+            "attributePosition": "auto"
+        }
+    },
+    "html": { "formatter": { "selfCloseVoidElements": "always" } }
+}
