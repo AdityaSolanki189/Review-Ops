@@ -2,17 +2,19 @@
 
 import { useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { ReviewCard } from '@/components/dashboard/dashboard-parts'
+import { EmptyState, ReviewCard } from '@/components/dashboard/dashboard-parts'
 import { QueryState } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useResponsiveSheetSide } from '@/hooks/use-responsive-sheet-side'
 import type { AnalyticsScope } from '@/lib/analytics'
 import type { IssueExplainerResult } from '@/lib/ai/issue-explainer'
 import { formatTopicLabel, type ReviewTopicKey } from '@/lib/classification/topics'
 import { buildDashboardApiUrl } from '@/lib/dashboard-scope'
 import { fetchJson } from '@/lib/queries/api'
 import { useReviewsQuery } from '@/lib/queries/reviews.queries'
+import { cn } from '@/lib/utils/utils'
 
 interface IssueExplainerSheetProps {
     open: boolean
@@ -68,10 +70,17 @@ export function IssueExplainerSheet({ open, onOpenChange, scope, propertySlug, t
     }, [open, fetchKey, mutate])
 
     const propertyName = evidenceQuery.data?.pages[0]?.items[0]?.property.name ?? formatPropertySlug(propertySlug)
+    const side = useResponsiveSheetSide()
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+            <SheetContent
+                side={side}
+                className={cn(
+                    'flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl',
+                    side === 'bottom' && 'max-h-[90dvh] rounded-t-xl',
+                )}
+            >
                 <SheetHeader className="shrink-0 border-b px-6 py-5 pr-12 text-left">
                     <SheetTitle className="text-base leading-snug">
                         {formatTopicLabel(topic)} at {propertyName}
@@ -79,7 +88,7 @@ export function IssueExplainerSheet({ open, onOpenChange, scope, propertySlug, t
                     <SheetDescription>AI-assisted breakdown with verifiable guest excerpts below.</SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 overflow-y-auto px-6 py-5">
+                <div className="flex-1 overflow-y-auto px-6 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
                     <QueryState
                         isLoading={isPending}
                         isError={isError}
@@ -144,7 +153,7 @@ export function IssueExplainerSheet({ open, onOpenChange, scope, propertySlug, t
                                     </section>
                                 </>
                             ) : data && !data.available ? (
-                                <p className="text-sm text-muted-foreground">{data.message}</p>
+                                <EmptyState message={data.message} />
                             ) : null}
 
                             {evidenceQuery.isLoading ? (

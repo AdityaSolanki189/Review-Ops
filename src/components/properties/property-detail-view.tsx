@@ -3,11 +3,13 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { useSearchParams } from 'next/navigation'
+import { MessageSquare, Star, ThumbsDown } from 'lucide-react'
 import { PeriodRatingTrendChart, RatingBandDistributionChart } from '@/components/dashboard/dashboard-charts'
-import { MetricCard, ReviewCard } from '@/components/dashboard/dashboard-parts'
+import { EmptyState, MetricCard, ReviewCard } from '@/components/dashboard/dashboard-parts'
 import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
 import { QueryState } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -67,8 +69,10 @@ export function PropertyDetailView({ slug }: PropertyDetailViewProps) {
     }
 
     return (
-        <div className="space-y-8">
-            {propertiesQuery.data ? <DashboardScopeBar properties={propertiesQuery.data} /> : null}
+        <div className="space-y-6">
+            {propertiesQuery.data ? (
+                <DashboardScopeBar properties={propertiesQuery.data} lockedPropertySlug={slug} />
+            ) : null}
 
             <QueryState
                 isLoading={isLoading}
@@ -76,9 +80,9 @@ export function PropertyDetailView({ slug }: PropertyDetailViewProps) {
                 error={error}
                 onRetry={refetchAll}
                 skeleton={
-                    <div className="space-y-8">
+                    <div className="space-y-6">
                         <Skeleton className="h-10 w-64" />
-                        <div className="grid gap-6 lg:grid-cols-2">
+                        <div className="grid gap-6 md:grid-cols-2">
                             <Skeleton className="h-64" />
                             <Skeleton className="h-64" />
                         </div>
@@ -122,25 +126,26 @@ function PropertyDetailContent({
     const propertyRow = overview.propertyComparison[0]
 
     return (
-        <div className="space-y-8">
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <Link href="/properties" className="text-sm text-muted-foreground hover:underline">
-                        Back to properties
+        <div className="space-y-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="space-y-2">
+                    <Link
+                        href="/properties"
+                        className="inline-flex min-h-11 items-center text-sm text-muted-foreground hover:underline"
+                    >
+                        ← Back to properties
                     </Link>
-                    <h2 className="mt-2 text-2xl font-semibold tracking-tight">{property.name}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{scopeComparisonLabel(scope)}</p>
+                    <p className="text-sm text-muted-foreground">{scopeComparisonLabel(scope)}</p>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                    <Badge variant="outline" className="font-mono tabular-nums">
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                    <Badge variant="outline" className="w-fit font-mono tabular-nums">
                         Booking ID: {property.bookingPropertyId}
                     </Badge>
-                    <Link
-                        href={buildReviewsDrillDownUrl({ scope, property: property.slug, representative: true })}
-                        className="text-sm font-medium text-primary hover:underline"
-                    >
-                        View filtered reviews
-                    </Link>
+                    <Button asChild className="min-h-11 w-full sm:w-auto">
+                        <Link href={buildReviewsDrillDownUrl({ scope, property: property.slug, representative: true })}>
+                            View filtered reviews
+                        </Link>
+                    </Button>
                 </div>
             </div>
 
@@ -152,6 +157,8 @@ function PropertyDetailContent({
                         subtitle={`${propertyRow.reviewActivity.sampleSize} reviews`}
                         delta={propertyRow.averageRating.delta}
                         insufficient={propertyRow.averageRating.status === 'insufficient_data'}
+                        icon={Star}
+                        tone="success"
                     />
                     <MetricCard
                         title="Review activity"
@@ -164,6 +171,8 @@ function PropertyDetailContent({
                         delta={propertyRow.reviewActivity.delta}
                         deltaSuffix=""
                         insufficient={propertyRow.reviewActivity.status === 'insufficient_data'}
+                        icon={MessageSquare}
+                        tone="primary"
                     />
                     <MetricCard
                         title="Low-score rate"
@@ -176,11 +185,14 @@ function PropertyDetailContent({
                         delta={propertyRow.lowScoreRate.delta}
                         deltaSuffix=" pp"
                         insufficient={propertyRow.lowScoreRate.status === 'insufficient_data'}
+                        icon={ThumbsDown}
+                        tone="warning"
+                        invertDelta
                     />
                 </div>
             ) : null}
 
-            <div className="grid gap-6 xl:grid-cols-2">
+            <div className="grid gap-6 md:grid-cols-2">
                 <Card>
                     <CardHeader>
                         <CardTitle>Rating trend</CardTitle>
@@ -188,7 +200,7 @@ function PropertyDetailContent({
                     </CardHeader>
                     <CardContent>
                         {series.rating.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No review history in this period.</p>
+                            <EmptyState message="No review history in this period." />
                         ) : (
                             <PeriodRatingTrendChart
                                 rating={series.rating}
@@ -205,7 +217,7 @@ function PropertyDetailContent({
                     </CardHeader>
                     <CardContent>
                         {series.ratingBands.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No reviews in this period.</p>
+                            <EmptyState message="No reviews in this period." />
                         ) : (
                             <RatingBandDistributionChart data={series.ratingBands} />
                         )}
@@ -261,7 +273,7 @@ function PropertyDetailContent({
                     </CardHeader>
                     <CardContent className="flex flex-wrap gap-2">
                         {overview.positiveDrivers.slice(0, 8).map((driver) => (
-                            <Badge key={driver.topic} variant="outline">
+                            <Badge key={driver.topic} variant="outline" className="border-success/30 text-success">
                                 {formatTopicLabel(driver.topic)} · {driver.positiveMentionRate?.toFixed(0) ?? 0}%
                             </Badge>
                         ))}
@@ -270,14 +282,10 @@ function PropertyDetailContent({
             ) : null}
 
             <div>
-                <h3 className="mb-4 text-xl font-semibold tracking-tight">Representative reviews</h3>
-                <div className="grid gap-4">
+                <h3 className="mb-4 text-base font-semibold tracking-tight">Representative reviews</h3>
+                <div className="grid gap-3">
                     {recentReviews.length === 0 ? (
-                        <Card>
-                            <CardContent className="pt-6 text-sm text-muted-foreground">
-                                No reviews collected for this property yet.
-                            </CardContent>
-                        </Card>
+                        <EmptyState message="No reviews collected for this property yet." />
                     ) : (
                         recentReviews.map((review) => (
                             <ReviewCard

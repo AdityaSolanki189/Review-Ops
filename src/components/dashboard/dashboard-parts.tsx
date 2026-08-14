@@ -8,10 +8,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { ReviewDetailSheet } from '@/components/reviews/review-detail-sheet'
 import { formatTopicLabel } from '@/lib/classification/topics'
 import type { ReviewTopicKey } from '@/lib/classification/topics'
+import { shortPropertyName } from '@/lib/dashboard-scope'
 import type { ReviewListItem } from '@/lib/queries/reviews.queries'
+import { ratingTone, ratingToneStyles } from '@/lib/review-card-utils'
 import { cn } from '@/lib/utils/utils'
 
-type MetricTone = 'primary' | 'success' | 'warning' | 'destructive'
+export type MetricTone = 'primary' | 'success' | 'warning' | 'destructive'
 
 const toneChipClass: Record<MetricTone, string> = {
     primary: 'bg-primary/10 text-primary',
@@ -30,6 +32,13 @@ type ReviewCardProps = {
     review?: ReviewListItem
     onSelect?: () => void
     compact?: boolean
+    similarity?: number | null
+}
+
+function topicChipClass(sentiment: string): string {
+    if (sentiment === 'positive') return 'border-success/30 text-success'
+    if (sentiment === 'negative') return 'border-destructive/30 text-destructive'
+    return 'text-muted-foreground'
 }
 
 export function ReviewCard({
@@ -42,6 +51,7 @@ export function ReviewCard({
     review,
     onSelect,
     compact = false,
+    similarity,
 }: ReviewCardProps) {
     const [open, setOpen] = useState(false)
     const interactive = Boolean(review)
@@ -50,13 +60,20 @@ export function ReviewCard({
     const resolvedTitle = title ?? review?.title
     const resolvedExcerpt = excerpt ?? review?.negativeText ?? review?.positiveText
     const resolvedTopics = topics ?? review?.topics ?? []
+    const tone = ratingTone(resolvedRating === '—' ? null : resolvedRating)
+    const toneStyle = ratingToneStyles[tone]
+    const visibleTopics = resolvedTopics.slice(0, 4)
+    const overflowCount = resolvedTopics.length - visibleTopics.length
 
     const card = (
         <Card
             className={cn(
+                'overflow-hidden border-l-[3px]',
+                toneStyle.border,
                 compact && 'gap-0 py-0 shadow-none',
+                interactive && 'cursor-pointer min-h-11',
                 interactive &&
-                    'cursor-pointer transition-[transform,border-color] duration-150 ease-[var(--ease-out)] hover:border-primary/30 active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100',
+                    'transition-[transform,border-color] duration-150 ease-[var(--ease-out)] [@media(hover:hover)]:hover:border-primary/30 [@media(hover:hover)]:active:scale-[0.99] motion-reduce:transition-none motion-reduce:active:scale-100',
             )}
             onClick={
                 interactive
@@ -80,40 +97,65 @@ export function ReviewCard({
             role={interactive ? 'button' : undefined}
             tabIndex={interactive ? 0 : undefined}
         >
-            <CardContent className={cn('space-y-3', compact ? 'p-4' : 'pt-6')}>
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <p className="font-medium">{propertyName}</p>
-                        <p className="text-sm text-muted-foreground">
-                            {resolvedReviewDate
-                                ? resolvedReviewDate.toLocaleDateString('en-AU', {
-                                      day: 'numeric',
-                                      month: 'short',
-                                      year: 'numeric',
-                                  })
-                                : '—'}
-                        </p>
-                    </div>
-                    <Badge variant="secondary" className="font-mono tabular-nums">
-                        {resolvedRating} / 10
-                    </Badge>
+            <CardContent className={cn('flex gap-3', compact ? 'p-3' : 'p-4 sm:p-5')}>
+                <div
+                    className={cn(
+                        'flex size-12 shrink-0 items-center justify-center rounded-md font-mono text-xl tabular-nums',
+                        toneStyle.block,
+                    )}
+                >
+                    {resolvedRating}
                 </div>
-                {resolvedTitle ? <p className="font-medium">{resolvedTitle}</p> : null}
-                {resolvedExcerpt ? (
-                    <p className="text-sm text-muted-foreground line-clamp-2">{resolvedExcerpt}</p>
-                ) : null}
-                {resolvedTopics.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                        {resolvedTopics.map((topic) => (
-                            <Badge
-                                key={`${topic.topic}-${topic.sentiment}`}
-                                variant={topic.sentiment === 'negative' ? 'destructive' : 'outline'}
-                            >
-                                {formatTopicLabel(topic.topic as ReviewTopicKey)} · {topic.sentiment}
-                            </Badge>
-                        ))}
+
+                <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">{shortPropertyName(propertyName)}</span>
+                            {resolvedReviewDate ? (
+                                <>
+                                    {' · '}
+                                    {resolvedReviewDate.toLocaleDateString('en-AU', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: 'numeric',
+                                    })}
+                                </>
+                            ) : null}
+                        </p>
+                        {similarity != null ? (
+                            <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
+                                {(similarity * 100).toFixed(0)}%
+                            </span>
+                        ) : null}
                     </div>
-                ) : null}
+
+                    {resolvedTitle ? <p className="truncate text-sm font-medium">{resolvedTitle}</p> : null}
+
+                    {!compact && resolvedExcerpt ? (
+                        <p className="line-clamp-2 max-w-[65ch] text-sm leading-relaxed text-muted-foreground">
+                            {resolvedExcerpt}
+                        </p>
+                    ) : null}
+
+                    {visibleTopics.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                            {visibleTopics.map((topic) => (
+                                <Badge
+                                    key={`${topic.topic}-${topic.sentiment}`}
+                                    variant="outline"
+                                    className={cn('text-xs font-normal', topicChipClass(topic.sentiment))}
+                                >
+                                    {formatTopicLabel(topic.topic as ReviewTopicKey)}
+                                </Badge>
+                            ))}
+                            {overflowCount > 0 ? (
+                                <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                                    +{overflowCount}
+                                </Badge>
+                            ) : null}
+                        </div>
+                    ) : null}
+                </div>
             </CardContent>
         </Card>
     )

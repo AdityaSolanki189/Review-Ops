@@ -4,14 +4,18 @@ import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { Loader2, Sparkles } from 'lucide-react'
+import { EmptyState } from '@/components/dashboard/dashboard-parts'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useResponsiveSheetSide } from '@/hooks/use-responsive-sheet-side'
 import { formatTopicLabel } from '@/lib/classification/topics'
 import type { ReviewTopicKey } from '@/lib/classification/topics'
 import { fetchJson } from '@/lib/queries/api'
 import type { ReviewListItem } from '@/lib/queries/reviews.queries'
+import { cn } from '@/lib/utils/utils'
 
 type ReviewInsight = {
     summary: string
@@ -79,12 +83,21 @@ function InsightBlock({ reviewId }: { reviewId: string }) {
 
     if (!data.available) {
         return (
-            <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
-                <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
+            <div className="rounded-lg border bg-muted/40 p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium">
                     <Sparkles className="size-4" />
                     AI insight
                 </div>
-                <p>{data.message}</p>
+                <EmptyState message={data.message} />
+                <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-3 min-h-11 w-full"
+                    disabled={generateMutation.isPending}
+                    onClick={() => generateMutation.mutate()}
+                >
+                    Generate insight
+                </Button>
             </div>
         )
     }
@@ -139,9 +152,17 @@ export function ReviewDetailSheet({
     open: boolean
     onOpenChange: (open: boolean) => void
 }) {
+    const side = useResponsiveSheetSide()
+
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
+            <SheetContent
+                side={side}
+                className={cn(
+                    'flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl',
+                    side === 'bottom' && 'max-h-[90dvh] rounded-t-xl',
+                )}
+            >
                 <SheetHeader className="shrink-0 border-b px-6 py-5 pr-12 text-left">
                     <SheetTitle className="text-base leading-snug">{review.title ?? 'Guest review'}</SheetTitle>
                     <SheetDescription>
@@ -150,7 +171,7 @@ export function ReviewDetailSheet({
                     </SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+                <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
                     <div className="grid gap-4 text-sm sm:grid-cols-2">
                         {review.reviewerCountry ? (
                             <div className="space-y-1">

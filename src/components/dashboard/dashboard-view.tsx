@@ -20,7 +20,7 @@ import { IssueExplainerSheet } from '@/components/dashboard/issue-explainer-shee
 import { SyncHealthList } from '@/components/dashboard/sync-health-list'
 import { WeeklySnapshotCard } from '@/components/dashboard/weekly-snapshot-card'
 import { QueryState, RefreshButton } from '@/components/query-state'
-import { Badge } from '@/components/ui/badge'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -236,103 +236,158 @@ export function DashboardView() {
                                         message="No major operational issue spikes detected in this period."
                                     />
                                 ) : (
-                                    <div className="overflow-x-auto">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Property</TableHead>
-                                                    <TableHead>Topic</TableHead>
-                                                    <TableHead title="Negative mentions as % of all reviews in period">
-                                                        Of all reviews
-                                                    </TableHead>
-                                                    <TableHead title="Negative mentions as % of low-score reviews (≤5)">
-                                                        Of low scores
-                                                    </TableHead>
-                                                    <TableHead>Change</TableHead>
-                                                    <TableHead>Rating gap</TableHead>
-                                                    <TableHead>Sample</TableHead>
-                                                    <TableHead>Latest</TableHead>
-                                                    <TableHead />
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {issues.slice(0, 8).map((issue) => {
-                                                    const href = buildReviewsDrillDownUrl({
-                                                        scope,
-                                                        property: issue.propertySlug,
-                                                        topic: issue.topic,
-                                                        sentiment: 'negative',
-                                                        representative: true,
-                                                    })
-                                                    return (
-                                                        <TableRow key={`${issue.propertySlug}-${issue.topic}`}>
-                                                            <TableCell>
-                                                                <Link
-                                                                    href={href}
-                                                                    className="font-medium hover:underline"
-                                                                >
-                                                                    {formatPropertySlug(issue.propertySlug)}
-                                                                </Link>
-                                                            </TableCell>
-                                                            <TableCell>{formatTopicLabel(issue.topic)}</TableCell>
-                                                            <TableCell className="font-mono tabular-nums">
-                                                                {issue.portfolioNegativeShare !== null
-                                                                    ? `${issue.portfolioNegativeShare.toFixed(1)}%`
-                                                                    : 'n/a'}
-                                                            </TableCell>
-                                                            <TableCell className="font-mono tabular-nums">
-                                                                {issue.negativeReviewShare !== null
-                                                                    ? `${issue.negativeReviewShare.toFixed(1)}%`
-                                                                    : 'n/a'}
-                                                            </TableCell>
-                                                            <TableCell className="font-mono tabular-nums">
-                                                                {issue.momentumPercentagePoints !== null
-                                                                    ? `${issue.momentumPercentagePoints >= 0 ? '+' : ''}${issue.momentumPercentagePoints.toFixed(1)} pp`
-                                                                    : 'n/a'}
-                                                                {isAnomalyIssue(issue) ? (
-                                                                    <Badge variant="destructive" className="ml-2">
-                                                                        Anomaly
-                                                                    </Badge>
-                                                                ) : null}
-                                                            </TableCell>
-                                                            <TableCell className="font-mono tabular-nums">
-                                                                {issue.ratingGap !== null
-                                                                    ? `${issue.ratingGap >= 0 ? '+' : ''}${issue.ratingGap.toFixed(1)}`
-                                                                    : 'n/a'}
-                                                            </TableCell>
-                                                            <TableCell className="font-mono tabular-nums">
-                                                                {issue.sampleSize}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                {issue.latestReviewAt
-                                                                    ? format(
-                                                                          new Date(issue.latestReviewAt),
-                                                                          'd MMM yyyy',
-                                                                      )
-                                                                    : '-'}
-                                                            </TableCell>
-                                                            <TableCell>
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    className="h-9 transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-                                                                    onClick={() =>
-                                                                        setExplainerTarget({
-                                                                            propertySlug: issue.propertySlug,
-                                                                            topic: issue.topic,
-                                                                        })
-                                                                    }
-                                                                >
-                                                                    Explain
-                                                                </Button>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    )
-                                                })}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
+                                    <>
+                                        <div className="space-y-3 md:hidden">
+                                            {issues.slice(0, 8).map((issue) => (
+                                                <div
+                                                    key={`${issue.propertySlug}-${issue.topic}-mobile`}
+                                                    className="rounded-lg border p-4 text-sm"
+                                                >
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div>
+                                                            <Link
+                                                                href={buildReviewsDrillDownUrl({
+                                                                    scope,
+                                                                    property: issue.propertySlug,
+                                                                    topic: issue.topic,
+                                                                    sentiment: 'negative',
+                                                                    representative: true,
+                                                                })}
+                                                                className="font-medium hover:underline"
+                                                            >
+                                                                {formatPropertySlug(issue.propertySlug)}
+                                                            </Link>
+                                                            <p className="mt-1 text-muted-foreground">
+                                                                {formatTopicLabel(issue.topic)}
+                                                            </p>
+                                                        </div>
+                                                        {issue.momentumPercentagePoints !== null ? (
+                                                            <span className="shrink-0 font-mono text-xs tabular-nums">
+                                                                {issue.momentumPercentagePoints >= 0 ? '+' : ''}
+                                                                {issue.momentumPercentagePoints.toFixed(1)} pp
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                    {isAnomalyIssue(issue) ? (
+                                                        <Badge variant="destructive" className="mt-2">
+                                                            Anomaly
+                                                        </Badge>
+                                                    ) : null}
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="mt-3 min-h-11 w-full"
+                                                        onClick={() =>
+                                                            setExplainerTarget({
+                                                                propertySlug: issue.propertySlug,
+                                                                topic: issue.topic,
+                                                            })
+                                                        }
+                                                    >
+                                                        Explain
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="hidden overflow-x-auto md:block">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Property</TableHead>
+                                                        <TableHead>Topic</TableHead>
+                                                        <TableHead title="Negative mentions as % of all reviews in period">
+                                                            Of all reviews
+                                                        </TableHead>
+                                                        <TableHead title="Negative mentions as % of low-score reviews (≤5)">
+                                                            Of low scores
+                                                        </TableHead>
+                                                        <TableHead>Change</TableHead>
+                                                        <TableHead>Rating gap</TableHead>
+                                                        <TableHead>Sample</TableHead>
+                                                        <TableHead>Latest</TableHead>
+                                                        <TableHead />
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {issues.slice(0, 8).map((issue) => {
+                                                        const href = buildReviewsDrillDownUrl({
+                                                            scope,
+                                                            property: issue.propertySlug,
+                                                            topic: issue.topic,
+                                                            sentiment: 'negative',
+                                                            representative: true,
+                                                        })
+                                                        return (
+                                                            <TableRow key={`${issue.propertySlug}-${issue.topic}`}>
+                                                                <TableCell>
+                                                                    <Link
+                                                                        href={href}
+                                                                        className="font-medium hover:underline"
+                                                                    >
+                                                                        {formatPropertySlug(issue.propertySlug)}
+                                                                    </Link>
+                                                                </TableCell>
+                                                                <TableCell>{formatTopicLabel(issue.topic)}</TableCell>
+                                                                <TableCell className="font-mono tabular-nums">
+                                                                    {issue.portfolioNegativeShare !== null
+                                                                        ? `${issue.portfolioNegativeShare.toFixed(1)}%`
+                                                                        : 'n/a'}
+                                                                </TableCell>
+                                                                <TableCell className="font-mono tabular-nums">
+                                                                    {issue.negativeReviewShare !== null
+                                                                        ? `${issue.negativeReviewShare.toFixed(1)}%`
+                                                                        : 'n/a'}
+                                                                </TableCell>
+                                                                <TableCell className="font-mono tabular-nums">
+                                                                    {issue.momentumPercentagePoints !== null
+                                                                        ? `${issue.momentumPercentagePoints >= 0 ? '+' : ''}${issue.momentumPercentagePoints.toFixed(1)} pp`
+                                                                        : 'n/a'}
+                                                                    {isAnomalyIssue(issue) ? (
+                                                                        <Badge variant="destructive" className="ml-2">
+                                                                            Anomaly
+                                                                        </Badge>
+                                                                    ) : null}
+                                                                </TableCell>
+                                                                <TableCell className="font-mono tabular-nums">
+                                                                    {issue.ratingGap !== null
+                                                                        ? `${issue.ratingGap >= 0 ? '+' : ''}${issue.ratingGap.toFixed(1)}`
+                                                                        : 'n/a'}
+                                                                </TableCell>
+                                                                <TableCell className="font-mono tabular-nums">
+                                                                    {issue.sampleSize}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    {issue.latestReviewAt
+                                                                        ? format(
+                                                                              new Date(issue.latestReviewAt),
+                                                                              'd MMM yyyy',
+                                                                          )
+                                                                        : '-'}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Button
+                                                                        type="button"
+                                                                        variant="ghost"
+                                                                        size="sm"
+                                                                        className="h-9 transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+                                                                        onClick={() =>
+                                                                            setExplainerTarget({
+                                                                                propertySlug: issue.propertySlug,
+                                                                                topic: issue.topic,
+                                                                            })
+                                                                        }
+                                                                    >
+                                                                        Explain
+                                                                    </Button>
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )
+                                                    })}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </>
                                 )}
                             </CardContent>
                         </Card>
@@ -441,65 +496,127 @@ export function DashboardView() {
                                     {topicMatrixQuery.data.rows.length === 0 ? (
                                         <EmptyState icon={Inbox} message="No topic data for this period." />
                                     ) : (
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Property</TableHead>
-                                                    {topicMatrixQuery.data.topics.map((topic) => (
-                                                        <TableHead key={topic} className="text-center text-xs">
-                                                            {formatTopicLabel(topic).split(' ')[0]}
-                                                        </TableHead>
-                                                    ))}
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
+                                        <>
+                                            <Accordion type="multiple" className="md:hidden">
                                                 {topicMatrixQuery.data.rows.map((row) => (
-                                                    <TableRow key={row.property.slug}>
-                                                        <TableCell className="font-medium">
+                                                    <AccordionItem key={row.property.slug} value={row.property.slug}>
+                                                        <AccordionTrigger className="min-h-11 py-3">
                                                             {shortPropertyName(row.property.name)}
-                                                        </TableCell>
-                                                        {topicMatrixQuery.data.topics.map((topic) => {
-                                                            const cell = row.cells[topic as ReviewTopicKey]
-                                                            const href = buildReviewsDrillDownUrl({
-                                                                scope,
-                                                                property: row.property.slug,
-                                                                topic: topic as ReviewTopicKey,
-                                                                sentiment: 'negative',
-                                                            })
-                                                            return (
-                                                                <TableCell key={topic} className="p-1">
-                                                                    <button
-                                                                        type="button"
-                                                                        className={cn(
-                                                                            'block min-h-9 w-full rounded px-2 py-1.5 text-center text-xs font-mono tabular-nums',
-                                                                            'transition-[transform,background-color] duration-150 ease-[var(--ease-out)]',
-                                                                            'active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100',
-                                                                            heatCellClass(cell.negativeMentionRate),
-                                                                        )}
-                                                                        onClick={() =>
-                                                                            setExplainerTarget({
-                                                                                propertySlug: row.property.slug,
-                                                                                topic: topic as ReviewTopicKey,
-                                                                            })
-                                                                        }
-                                                                    >
-                                                                        {cell.negativeMentionRate === null
-                                                                            ? '-'
-                                                                            : `${cell.negativeMentionRate.toFixed(0)}%`}
-                                                                    </button>
-                                                                    <Link
-                                                                        href={href}
-                                                                        className="mt-1 block text-center text-[10px] text-primary hover:underline"
-                                                                    >
-                                                                        Reviews
-                                                                    </Link>
-                                                                </TableCell>
-                                                            )
-                                                        })}
-                                                    </TableRow>
+                                                        </AccordionTrigger>
+                                                        <AccordionContent>
+                                                            <ul className="space-y-2">
+                                                                {topicMatrixQuery.data.topics.map((topic) => {
+                                                                    const cell = row.cells[topic as ReviewTopicKey]
+                                                                    const href = buildReviewsDrillDownUrl({
+                                                                        scope,
+                                                                        property: row.property.slug,
+                                                                        topic: topic as ReviewTopicKey,
+                                                                        sentiment: 'negative',
+                                                                    })
+                                                                    return (
+                                                                        <li
+                                                                            key={topic}
+                                                                            className="flex items-center justify-between gap-2 rounded-md border px-3 py-2"
+                                                                        >
+                                                                            <span className="text-sm">
+                                                                                {formatTopicLabel(topic)}
+                                                                            </span>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className={cn(
+                                                                                        'min-h-9 rounded px-2 py-1 font-mono text-xs tabular-nums',
+                                                                                        heatCellClass(
+                                                                                            cell.negativeMentionRate,
+                                                                                        ),
+                                                                                    )}
+                                                                                    onClick={() =>
+                                                                                        setExplainerTarget({
+                                                                                            propertySlug:
+                                                                                                row.property.slug,
+                                                                                            topic: topic as ReviewTopicKey,
+                                                                                        })
+                                                                                    }
+                                                                                >
+                                                                                    {cell.negativeMentionRate === null
+                                                                                        ? '-'
+                                                                                        : `${cell.negativeMentionRate.toFixed(0)}%`}
+                                                                                </button>
+                                                                                <Link
+                                                                                    href={href}
+                                                                                    className="text-xs text-primary hover:underline"
+                                                                                >
+                                                                                    Reviews
+                                                                                </Link>
+                                                                            </div>
+                                                                        </li>
+                                                                    )
+                                                                })}
+                                                            </ul>
+                                                        </AccordionContent>
+                                                    </AccordionItem>
                                                 ))}
-                                            </TableBody>
-                                        </Table>
+                                            </Accordion>
+                                            <Table className="hidden md:table">
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Property</TableHead>
+                                                        {topicMatrixQuery.data.topics.map((topic) => (
+                                                            <TableHead key={topic} className="text-center text-xs">
+                                                                {formatTopicLabel(topic).split(' ')[0]}
+                                                            </TableHead>
+                                                        ))}
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {topicMatrixQuery.data.rows.map((row) => (
+                                                        <TableRow key={row.property.slug}>
+                                                            <TableCell className="font-medium">
+                                                                {shortPropertyName(row.property.name)}
+                                                            </TableCell>
+                                                            {topicMatrixQuery.data.topics.map((topic) => {
+                                                                const cell = row.cells[topic as ReviewTopicKey]
+                                                                const href = buildReviewsDrillDownUrl({
+                                                                    scope,
+                                                                    property: row.property.slug,
+                                                                    topic: topic as ReviewTopicKey,
+                                                                    sentiment: 'negative',
+                                                                })
+                                                                return (
+                                                                    <TableCell key={topic} className="p-1">
+                                                                        <button
+                                                                            type="button"
+                                                                            className={cn(
+                                                                                'block min-h-9 w-full rounded px-2 py-1.5 text-center text-xs font-mono tabular-nums',
+                                                                                'transition-[transform,background-color] duration-150 ease-[var(--ease-out)]',
+                                                                                'active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100',
+                                                                                heatCellClass(cell.negativeMentionRate),
+                                                                            )}
+                                                                            onClick={() =>
+                                                                                setExplainerTarget({
+                                                                                    propertySlug: row.property.slug,
+                                                                                    topic: topic as ReviewTopicKey,
+                                                                                })
+                                                                            }
+                                                                        >
+                                                                            {cell.negativeMentionRate === null
+                                                                                ? '-'
+                                                                                : `${cell.negativeMentionRate.toFixed(0)}%`}
+                                                                        </button>
+                                                                        <Link
+                                                                            href={href}
+                                                                            className="mt-1 block text-center text-xs text-primary hover:underline"
+                                                                        >
+                                                                            Reviews
+                                                                        </Link>
+                                                                    </TableCell>
+                                                                )
+                                                            })}
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </>
                                     )}
                                 </CardContent>
                             </Card>
@@ -801,56 +918,118 @@ export function DashboardView() {
                                 {portfolioAvg !== null ? portfolioAvg.toFixed(1) : 'n/a'}
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Property</TableHead>
-                                        <TableHead>Rating</TableHead>
-                                        <TableHead>vs previous</TableHead>
-                                        <TableHead>vs portfolio</TableHead>
-                                        <TableHead>Reviews</TableHead>
-                                        <TableHead>Low-score rate</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {overview.propertyComparison.map((row) => {
-                                        const gap = propertyVsPortfolioGap(row.averageRating.value, portfolioAvg)
-                                        const href = buildReviewsDrillDownUrl({
-                                            scope,
-                                            property: row.property.slug,
-                                        })
-                                        return (
-                                            <TableRow key={row.property.slug}>
-                                                <TableCell>
-                                                    <Link href={href} className="font-medium hover:underline">
-                                                        {shortPropertyName(row.property.name)}
-                                                    </Link>
-                                                </TableCell>
-                                                <TableCell className="font-mono tabular-nums">
-                                                    {row.averageRating.value?.toFixed(1) ?? '-'}
-                                                </TableCell>
-                                                <TableCell className="font-mono tabular-nums">
-                                                    {row.averageRating.delta !== null
-                                                        ? `${row.averageRating.delta >= 0 ? '+' : ''}${row.averageRating.delta.toFixed(1)}`
-                                                        : 'n/a'}
-                                                </TableCell>
-                                                <TableCell className="font-mono tabular-nums">
-                                                    {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(1)}` : 'n/a'}
-                                                </TableCell>
-                                                <TableCell className="font-mono tabular-nums">
-                                                    {row.reviewActivity.sampleSize}
-                                                </TableCell>
-                                                <TableCell className="font-mono tabular-nums">
-                                                    {row.lowScoreRate.value !== null
-                                                        ? `${row.lowScoreRate.value.toFixed(1)}%`
-                                                        : '-'}
-                                                </TableCell>
-                                            </TableRow>
-                                        )
-                                    })}
-                                </TableBody>
-                            </Table>
+                        <CardContent>
+                            <div className="space-y-3 md:hidden">
+                                {overview.propertyComparison.map((row) => {
+                                    const gap = propertyVsPortfolioGap(row.averageRating.value, portfolioAvg)
+                                    const href = buildReviewsDrillDownUrl({
+                                        scope,
+                                        property: row.property.slug,
+                                    })
+                                    return (
+                                        <div
+                                            key={`${row.property.slug}-mobile`}
+                                            className="rounded-lg border p-4 text-sm"
+                                        >
+                                            <Link href={href} className="font-medium hover:underline">
+                                                {shortPropertyName(row.property.name)}
+                                            </Link>
+                                            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-muted-foreground">
+                                                <div>
+                                                    <dt>Rating</dt>
+                                                    <dd className="font-mono tabular-nums text-foreground">
+                                                        {row.averageRating.value?.toFixed(1) ?? '-'}
+                                                    </dd>
+                                                </div>
+                                                <div>
+                                                    <dt>vs previous</dt>
+                                                    <dd className="font-mono tabular-nums text-foreground">
+                                                        {row.averageRating.delta !== null
+                                                            ? `${row.averageRating.delta >= 0 ? '+' : ''}${row.averageRating.delta.toFixed(1)}`
+                                                            : 'n/a'}
+                                                    </dd>
+                                                </div>
+                                                <div>
+                                                    <dt>Reviews</dt>
+                                                    <dd className="font-mono tabular-nums text-foreground">
+                                                        {row.reviewActivity.sampleSize}
+                                                    </dd>
+                                                </div>
+                                                <div>
+                                                    <dt>Low-score</dt>
+                                                    <dd className="font-mono tabular-nums text-foreground">
+                                                        {row.lowScoreRate.value !== null
+                                                            ? `${row.lowScoreRate.value.toFixed(1)}%`
+                                                            : '-'}
+                                                    </dd>
+                                                </div>
+                                            </dl>
+                                            {gap !== null ? (
+                                                <p className="mt-2 text-xs text-muted-foreground">
+                                                    vs portfolio:{' '}
+                                                    <span className="font-mono tabular-nums text-foreground">
+                                                        {gap >= 0 ? '+' : ''}
+                                                        {gap.toFixed(1)}
+                                                    </span>
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                            <div className="hidden overflow-x-auto md:block">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Property</TableHead>
+                                            <TableHead>Rating</TableHead>
+                                            <TableHead>vs previous</TableHead>
+                                            <TableHead>vs portfolio</TableHead>
+                                            <TableHead>Reviews</TableHead>
+                                            <TableHead>Low-score rate</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {overview.propertyComparison.map((row) => {
+                                            const gap = propertyVsPortfolioGap(row.averageRating.value, portfolioAvg)
+                                            const href = buildReviewsDrillDownUrl({
+                                                scope,
+                                                property: row.property.slug,
+                                            })
+                                            return (
+                                                <TableRow key={row.property.slug}>
+                                                    <TableCell>
+                                                        <Link href={href} className="font-medium hover:underline">
+                                                            {shortPropertyName(row.property.name)}
+                                                        </Link>
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {row.averageRating.value?.toFixed(1) ?? '-'}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {row.averageRating.delta !== null
+                                                            ? `${row.averageRating.delta >= 0 ? '+' : ''}${row.averageRating.delta.toFixed(1)}`
+                                                            : 'n/a'}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {gap !== null
+                                                            ? `${gap >= 0 ? '+' : ''}${gap.toFixed(1)}`
+                                                            : 'n/a'}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {row.reviewActivity.sampleSize}
+                                                    </TableCell>
+                                                    <TableCell className="font-mono tabular-nums">
+                                                        {row.lowScoreRate.value !== null
+                                                            ? `${row.lowScoreRate.value.toFixed(1)}%`
+                                                            : '-'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 ) : null}

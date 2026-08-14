@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { format } from 'date-fns'
+import { MetricCard } from '@/components/dashboard/dashboard-parts'
 import { QueryState } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -39,7 +40,7 @@ function WeeklySnapshotContent({ snapshot }: { snapshot: WeeklySnapshot }) {
                     </div>
                     <Link
                         href={reviewsUrl}
-                        className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                        className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
                     >
                         View this week&apos;s reviews
                     </Link>
@@ -47,33 +48,32 @@ function WeeklySnapshotContent({ snapshot }: { snapshot: WeeklySnapshot }) {
             </CardHeader>
             <CardContent className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-3">
-                    <div className="rounded-lg border p-4">
-                        <p className="text-sm text-muted-foreground">Average rating</p>
-                        <p className="mt-1 text-3xl font-semibold tracking-tight">
-                            {snapshot.averageRating.value === null
+                    <MetricCard
+                        title="Average rating"
+                        value={
+                            snapshot.averageRating.value === null
                                 ? 'No reviews'
-                                : snapshot.averageRating.value.toFixed(1)}
-                        </p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                            {snapshot.averageRating.reviewCount} reviews · {formatDelta(snapshot.averageRating.delta)}
-                        </p>
-                    </div>
-                    <div className="rounded-lg border p-4 md:col-span-2">
-                        <p className="text-sm font-medium">Weekly insight</p>
+                                : snapshot.averageRating.value.toFixed(1)
+                        }
+                        subtitle={`${snapshot.averageRating.reviewCount} reviews · ${formatDelta(snapshot.averageRating.delta)}`}
+                        tone="success"
+                    />
+                    <div className="space-y-2 md:col-span-2">
+                        <p className="text-sm font-medium text-muted-foreground">Weekly insight</p>
                         {snapshot.topNegativeTopic ? (
-                            <p className="mt-2 text-sm leading-relaxed">
+                            <p className="text-sm leading-relaxed">
                                 {formatNegativeTopicInsight(
                                     formatTopicLabel(snapshot.topNegativeTopic.topic),
                                     snapshot.topNegativeTopic.percentage,
                                 )}
                             </p>
                         ) : (
-                            <p className="mt-2 text-sm text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                                 No low-score reviews (≤5) this week to analyse yet.
                             </p>
                         )}
                         {snapshot.topPositiveTopic ? (
-                            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                            <p className="text-sm leading-relaxed text-muted-foreground">
                                 {formatPositiveTopicInsight(
                                     formatTopicLabel(snapshot.topPositiveTopic.topic),
                                     snapshot.topPositiveTopic.percentage,
@@ -85,7 +85,31 @@ function WeeklySnapshotContent({ snapshot }: { snapshot: WeeklySnapshot }) {
 
                 <div>
                     <p className="mb-3 text-sm font-medium">Property ratings this week</p>
-                    <Table>
+                    <div className="space-y-3 md:hidden">
+                        {snapshot.properties.map((property) => (
+                            <div key={property.slug} className="rounded-lg border p-4 text-sm">
+                                <p className="font-medium">{shortPropertyName(property.name)}</p>
+                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground">
+                                    <span>
+                                        Rating:{' '}
+                                        <span className="font-mono tabular-nums text-foreground">
+                                            {property.avgRating === null ? 'No reviews' : property.avgRating.toFixed(1)}
+                                        </span>
+                                    </span>
+                                    <span>{property.reviewCount} reviews</span>
+                                    {property.delta !== null ? (
+                                        <Badge variant={property.delta >= 0 ? 'default' : 'destructive'}>
+                                            {property.delta > 0 ? '+' : ''}
+                                            {property.delta.toFixed(1)} vs last week
+                                        </Badge>
+                                    ) : (
+                                        <span>— vs last week</span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <Table className="hidden md:table">
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Property</TableHead>
@@ -98,10 +122,10 @@ function WeeklySnapshotContent({ snapshot }: { snapshot: WeeklySnapshot }) {
                             {snapshot.properties.map((property) => (
                                 <TableRow key={property.slug}>
                                     <TableCell>{shortPropertyName(property.name)}</TableCell>
-                                    <TableCell>
+                                    <TableCell className="font-mono tabular-nums">
                                         {property.avgRating === null ? 'No reviews' : property.avgRating.toFixed(1)}
                                     </TableCell>
-                                    <TableCell>{property.reviewCount}</TableCell>
+                                    <TableCell className="font-mono tabular-nums">{property.reviewCount}</TableCell>
                                     <TableCell>
                                         {property.delta === null ? (
                                             <span className="text-muted-foreground">—</span>

@@ -1,15 +1,18 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { ReviewCard } from '@/components/dashboard/dashboard-parts'
+import { EmptyState, ReviewCard } from '@/components/dashboard/dashboard-parts'
+import { PageIntro } from '@/components/layout/page-intro'
 import { QueryState } from '@/components/query-state'
 import { ReviewFiltersForm } from '@/components/reviews/review-filters-form'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ReviewSentiment, ReviewTopicKey } from '@/lib/classification/topics'
+import { formatTopicLabel } from '@/lib/classification/topics'
+import { shortPropertyName } from '@/lib/dashboard-scope'
 import { usePropertiesListQuery } from '@/lib/queries/properties.queries'
 import { useReviewsQuery, type ReviewListItem } from '@/lib/queries/reviews.queries'
 import { useReviewSearchQuery } from '@/lib/queries/reviews-search.queries'
@@ -19,6 +22,44 @@ const EXAMPLE_QUERIES = [
     'late night check-in problems',
     'noisy rooms at night',
 ]
+
+function formatFilterLabel(key: string, value: string, properties: Array<{ slug: string; name: string }>): string {
+    switch (key) {
+        case 'q':
+            return `"${value}"`
+        case 'property': {
+            const match = properties.find((p) => p.slug === value)
+            return match ? shortPropertyName(match.name) : value
+        }
+        case 'ratingBand':
+            return { low: 'Low scores (≤5)', mid: 'Mid scores', high: 'High scores' }[value] ?? value
+        case 'topic':
+            return formatTopicLabel(value as ReviewTopicKey)
+        case 'sentiment':
+            return value.charAt(0).toUpperCase() + value.slice(1)
+        case 'sort':
+            return (
+                {
+                    newest: 'Newest first',
+                    oldest: 'Oldest first',
+                    'rating-high': 'Highest rating',
+                    'rating-low': 'Lowest rating',
+                }[value] ?? value
+            )
+        case 'representative':
+            return 'Representative first'
+        case 'minRating':
+            return `Min rating ${value}`
+        case 'maxRating':
+            return `Max rating ${value}`
+        case 'from':
+            return `From ${value}`
+        case 'to':
+            return `To ${value}`
+        default:
+            return value
+    }
+}
 
 export function ReviewsView() {
     const searchParams = useSearchParams()
@@ -100,11 +141,11 @@ export function ReviewsView() {
         else void reviewsQuery.refetch()
     }
 
+    const properties = propertiesQuery.data ?? []
+
     return (
-        <div className="space-y-8">
-            <div>
-                <p className="text-sm text-muted-foreground">Browse, filter, or semantically search guest reviews</p>
-            </div>
+        <div className="space-y-6">
+            <PageIntro>Browse, filter, or semantically search guest reviews</PageIntro>
 
             {propertiesQuery.data ? <ReviewFiltersForm properties={propertiesQuery.data} params={params} /> : null}
 
@@ -113,13 +154,15 @@ export function ReviewsView() {
                     const next = new URLSearchParams(searchParams)
                     next.set('q', example)
                     return (
-                        <a
+                        <Button
                             key={example}
-                            href={`/reviews?${next.toString()}`}
-                            className="rounded-full border bg-muted/40 px-3 py-1.5 text-xs hover:bg-muted"
+                            variant="outline"
+                            size="sm"
+                            asChild
+                            className="min-h-11 h-auto whitespace-normal text-left"
                         >
-                            {example}
-                        </a>
+                            <Link href={`/reviews?${next.toString()}`}>{example}</Link>
+                        </Button>
                     )
                 })}
             </div>
@@ -128,37 +171,33 @@ export function ReviewsView() {
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
                     <span className="font-medium text-foreground">Active filters</span>
                     {activeFilters.map(([key, value]) => (
-                        <a
-                            key={key}
-                            href={withoutFilter(key)}
-                            className="inline-flex min-h-11 items-center rounded-full border bg-background px-3 py-1.5 hover:bg-muted"
-                        >
-                            {key}: {value} ×
-                        </a>
+                        <Button key={key} variant="outline" size="sm" asChild className="min-h-11 h-auto rounded-full">
+                            <Link href={withoutFilter(key)}>{formatFilterLabel(key, value, properties)} ×</Link>
+                        </Button>
                     ))}
-                    <a
-                        href="/reviews"
-                        className="inline-flex min-h-11 items-center px-2 text-primary underline-offset-4 hover:underline"
-                    >
-                        Clear all
-                    </a>
+                    <Button variant="link" asChild className="min-h-11 px-2">
+                        <Link href="/reviews">Clear all</Link>
+                    </Button>
                 </div>
             ) : null}
 
-            {isSearchMode && searchQueryResult.data ? (
-                <Badge variant="outline">
-                    {searchQueryResult.data.mode === 'semantic' ? 'Semantic search' : 'Keyword fallback'}
-                </Badge>
-            ) : null}
-
-            {!isLoading && (isSearchMode ? searchQueryResult.data : reviewsQuery.data) ? (
-                <p className="text-sm font-medium">
-                    {reviews.length === 0
-                        ? '0 reviews found'
-                        : `${reviews.length} review${reviews.length === 1 ? '' : 's'}${isSearchMode ? ' matched' : ' on this page'}`}
-                    {activeFilters.length > 0 ? ' with filters applied' : ''}
-                </p>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                {!isLoading && (isSearchMode ? searchQueryResult.data : reviewsQuery.data) ? (
+                    <p className="text-sm font-medium">
+                        {reviews.length === 0
+                            ? '0 reviews found'
+                            : `${reviews.length} review${reviews.length === 1 ? '' : 's'}${isSearchMode ? ' matched' : ' on this page'}`}
+                        {activeFilters.length > 0 ? ' with filters applied' : ''}
+                    </p>
+                ) : (
+                    <span />
+                )}
+                {isSearchMode && searchQueryResult.data ? (
+                    <Badge variant="outline">
+                        {searchQueryResult.data.mode === 'semantic' ? 'Semantic search' : 'Keyword fallback'}
+                    </Badge>
+                ) : null}
+            </div>
 
             <QueryState
                 isLoading={isLoading}
@@ -174,39 +213,31 @@ export function ReviewsView() {
             >
                 {(isSearchMode ? searchQueryResult.data : reviewsQuery.data) ? (
                     <>
-                        <div className="grid gap-4">
+                        <div className="grid gap-3">
                             {reviews.length === 0 ? (
-                                <Card>
-                                    <CardContent className="pt-6 text-sm text-muted-foreground">
-                                        No reviews match these filters.
-                                    </CardContent>
-                                </Card>
+                                <EmptyState message="No reviews match these filters." />
                             ) : (
                                 reviews.map((review) => (
-                                    <div key={review.id} className="space-y-2">
-                                        {'similarity' in review && review.similarity != null ? (
-                                            <Badge variant="secondary" className="font-mono tabular-nums">
-                                                {(review.similarity * 100).toFixed(0)}% match
-                                            </Badge>
-                                        ) : null}
-                                        <ReviewCard
-                                            review={review}
-                                            propertyName={review.property.name}
-                                            rating={review.rating}
-                                            title={review.title}
-                                            excerpt={review.negativeText ?? review.positiveText}
-                                            reviewDate={review.reviewDate}
-                                            topics={review.topics}
-                                        />
-                                    </div>
+                                    <ReviewCard
+                                        key={review.id}
+                                        review={review}
+                                        propertyName={review.property.name}
+                                        rating={review.rating}
+                                        title={review.title}
+                                        excerpt={review.negativeText ?? review.positiveText}
+                                        reviewDate={review.reviewDate}
+                                        topics={review.topics}
+                                        similarity={'similarity' in review ? review.similarity : undefined}
+                                    />
                                 ))
                             )}
                         </div>
 
                         {!isSearchMode && pages.length > 0 ? (
-                            <div className="flex justify-center gap-2">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
                                 <Button
                                     variant="outline"
+                                    className="min-h-11 w-full sm:w-auto"
                                     disabled={pageIndex === 0 || reviewsQuery.isFetchingNextPage}
                                     onClick={() =>
                                         setPagination({ filterSearch, pageIndex: Math.max(0, pageIndex - 1) })
@@ -216,6 +247,7 @@ export function ReviewsView() {
                                 </Button>
                                 <Button
                                     variant="outline"
+                                    className="min-h-11 w-full sm:w-auto"
                                     disabled={
                                         reviewsQuery.isFetchingNextPage ||
                                         (!pages[pageIndex + 1] && !reviewsQuery.hasNextPage)

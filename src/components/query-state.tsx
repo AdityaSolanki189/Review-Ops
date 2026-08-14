@@ -48,7 +48,13 @@ interface RefreshButtonProps {
 
 export function RefreshButton({ onClick, isPending }: RefreshButtonProps) {
     return (
-        <Button variant="outline" size="sm" onClick={onClick} disabled={isPending}>
+        <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11 w-full sm:w-auto"
+            onClick={onClick}
+            disabled={isPending}
+        >
             {isPending ? 'Refreshing…' : 'Refresh data'}
         </Button>
     )

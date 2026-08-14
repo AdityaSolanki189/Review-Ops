@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { MetricCard } from '@/components/dashboard/dashboard-parts'
+import { ThumbsDown, Star } from 'lucide-react'
 import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
+import { PageIntro } from '@/components/layout/page-intro'
 import { QueryState } from '@/components/query-state'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { buildScopeQueryString, resolveScopeFromSearchParams, shortPropertyName } from '@/lib/dashboard-scope'
@@ -19,10 +21,8 @@ export function PropertiesView() {
     const overviewQuery = useDashboardOverviewQuery(scope)
 
     return (
-        <div className="space-y-8">
-            <div>
-                <p className="text-muted-foreground">Performance across the four Azzurro Sydney properties</p>
-            </div>
+        <div className="space-y-6">
+            <PageIntro>Performance across the four Azzurro Sydney properties</PageIntro>
 
             {propertiesQuery.data ? <DashboardScopeBar properties={propertiesQuery.data} /> : null}
 
@@ -44,40 +44,38 @@ export function PropertiesView() {
                     <div className="grid gap-4 md:grid-cols-2">
                         {overviewQuery.data.propertyComparison.map((row) => (
                             <Card key={row.property.slug}>
-                                <CardHeader>
-                                    <CardTitle>{row.property.name}</CardTitle>
+                                <CardHeader className="pb-3">
+                                    <CardTitle className="text-base">{shortPropertyName(row.property.name)}</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        <MetricCard
-                                            title="Average rating"
-                                            value={formatMetricValue(row.averageRating)}
-                                            subtitle={`${row.reviewActivity.sampleSize} reviews`}
-                                            delta={row.averageRating.delta}
-                                            insufficient={row.averageRating.status === 'insufficient_data'}
-                                        />
-                                        <MetricCard
-                                            title="Low-score rate"
-                                            value={
-                                                row.lowScoreRate.value === null
-                                                    ? 'No reviews'
-                                                    : `${row.lowScoreRate.value.toFixed(1)}%`
-                                            }
-                                            subtitle="Ratings ≤5"
-                                            delta={row.lowScoreRate.delta}
-                                            deltaSuffix=" pp"
-                                            insufficient={row.lowScoreRate.status === 'insufficient_data'}
-                                        />
+                                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+                                        <div className="flex items-center gap-2">
+                                            <Star className="size-4 text-success" aria-hidden />
+                                            <span className="font-mono text-lg font-semibold tabular-nums">
+                                                {formatMetricValue(row.averageRating)}
+                                            </span>
+                                            <span className="text-muted-foreground">
+                                                avg · {row.reviewActivity.sampleSize} reviews
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <ThumbsDown className="size-4 text-warning" aria-hidden />
+                                            <span className="font-mono font-semibold tabular-nums">
+                                                {row.lowScoreRate.value === null
+                                                    ? '—'
+                                                    : `${row.lowScoreRate.value.toFixed(1)}%`}
+                                            </span>
+                                            <span className="text-muted-foreground">low-score</span>
+                                        </div>
                                     </div>
                                     <p className="text-sm text-muted-foreground">
                                         {formatMetricDelta(row.reviewActivity, ' reviews in period')}
                                     </p>
-                                    <Link
-                                        href={`/properties/${row.property.slug}?${buildScopeQueryString(scope)}`}
-                                        className="inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline"
-                                    >
-                                        View property intelligence
-                                    </Link>
+                                    <Button asChild className="min-h-11 w-full sm:w-auto">
+                                        <Link href={`/properties/${row.property.slug}?${buildScopeQueryString(scope)}`}>
+                                            View property
+                                        </Link>
+                                    </Button>
                                 </CardContent>
                             </Card>
                         ))}

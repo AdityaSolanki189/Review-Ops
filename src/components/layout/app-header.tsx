@@ -29,7 +29,9 @@ export function AppHeader() {
             <Separator orientation="vertical" className="mr-1 h-6" />
             <div className="min-w-0 flex-1">
                 <h1 className="truncate text-base font-semibold tracking-tight">{meta.title}</h1>
-                {meta.subtitle ? <p className="truncate text-xs text-muted-foreground">{meta.subtitle}</p> : null}
+                {meta.subtitle ? (
+                    <p className="hidden truncate text-xs text-muted-foreground sm:block">{meta.subtitle}</p>
+                ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
                 <SyncStatusIndicator />
