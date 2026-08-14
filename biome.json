@@ -15,6 +15,8 @@
             "!build",
             "!coverage",
             "!src/db/migrations",
+            "!scripts",
+            "!data",
             "!cspell.config.json",
             "!.claude",
             "!.github"
@@ -37,6 +39,8 @@
             "!build",
             "!coverage",
             "!src/db/migrations",
+            "!scripts",
+            "!data",
             "!node_modules",
             "!.next",
             "!cspell.config.json",

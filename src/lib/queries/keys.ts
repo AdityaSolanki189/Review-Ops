@@ -12,6 +12,7 @@ export const queryKeys = {
         recentReviews: ['dashboard', 'recent-reviews'] as const,
         syncHealth: ['dashboard', 'sync-health'] as const,
         briefing: (scope: AnalyticsScope) => ['dashboard', 'briefing', scope] as const,
+        weeklySnapshot: ['dashboard', 'weekly-snapshot'] as const,
     },
     properties: {
         all: ['properties'] as const,

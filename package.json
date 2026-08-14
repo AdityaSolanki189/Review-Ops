@@ -20,6 +20,7 @@
         "db:push": "drizzle-kit push --config=drizzle.config.ts",
         "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
         "db:seed": "tsx scripts/seed.ts",
+        "db:export-sample": "tsx scripts/export-sample-reviews.ts",
         "reviews:reclassify": "tsx scripts/reclassify-reviews.ts",
         "reviews:embed": "tsx scripts/embed-reviews.ts"
     },

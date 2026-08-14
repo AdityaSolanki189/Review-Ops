@@ -16,6 +16,7 @@ type DashboardSeries = Awaited<ReturnType<typeof import('@/db/queries/dashboard-
 type RecentReviews = Awaited<ReturnType<typeof import('@/db/queries/analytics').getRecentReviews>>['items']
 type SyncHealth = Awaited<ReturnType<typeof import('@/db/queries/analytics').getSyncHealth>>
 type PortfolioBriefing = Awaited<ReturnType<typeof import('@/lib/ai/weekly-briefing').getPortfolioBriefing>>
+type WeeklySnapshot = Awaited<ReturnType<typeof import('@/db/queries/analytics').getWeeklySnapshot>>
 
 async function fetchOverview(scope: AnalyticsScope): Promise<DashboardOverview> {
     return fetchJson(buildDashboardApiUrl('/api/dashboard/overview', scope))
@@ -47,6 +48,10 @@ async function fetchSyncHealth(): Promise<SyncHealth> {
 
 async function fetchPortfolioBriefing(scope: AnalyticsScope): Promise<PortfolioBriefing> {
     return fetchJson(buildDashboardApiUrl('/api/dashboard/weekly-briefing', scope))
+}
+
+async function fetchWeeklySnapshot(): Promise<WeeklySnapshot> {
+    return fetchJson('/api/dashboard/weekly-snapshot')
 }
 
 export function useDashboardOverviewQuery(scope: AnalyticsScope) {
@@ -106,6 +111,14 @@ export function usePortfolioBriefingQuery(scope: AnalyticsScope) {
     })
 }
 
+export function useWeeklySnapshotQuery() {
+    return useQuery({
+        queryKey: queryKeys.dashboard.weeklySnapshot,
+        queryFn: fetchWeeklySnapshot,
+        staleTime: 60_000,
+    })
+}
+
 export type {
     DashboardOverview,
     DashboardIssues,
@@ -115,4 +128,5 @@ export type {
     PortfolioBriefing,
     RecentReviews,
     SyncHealth,
+    WeeklySnapshot,
 }

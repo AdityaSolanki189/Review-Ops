@@ -15,6 +15,7 @@ import {
 } from '@/components/dashboard/dashboard-parts'
 import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
 import { IssueExplainerSheet } from '@/components/dashboard/issue-explainer-sheet'
+import { WeeklySnapshotCard } from '@/components/dashboard/weekly-snapshot-card'
 import { QueryState, RefreshButton } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -41,6 +42,7 @@ import {
     useDashboardTopicMatrixQuery,
     usePortfolioBriefingQuery,
     useSyncHealthQuery,
+    useWeeklySnapshotQuery,
 } from '@/lib/queries/dashboard.queries'
 import { usePropertiesListQuery } from '@/lib/queries/properties.queries'
 
@@ -78,6 +80,7 @@ export function DashboardView() {
     const recentReviewsQuery = useDashboardRecentReviewsQuery()
     const syncHealthQuery = useSyncHealthQuery()
     const briefingQuery = usePortfolioBriefingQuery(scope)
+    const weeklySnapshotQuery = useWeeklySnapshotQuery()
     const invalidateCache = useInvalidateCache()
 
     const overview = overviewQuery.data
@@ -100,6 +103,14 @@ export function DashboardView() {
             </div>
 
             {propertiesQuery.data ? <DashboardScopeBar properties={propertiesQuery.data} /> : null}
+
+            <WeeklySnapshotCard
+                snapshot={weeklySnapshotQuery.data}
+                isLoading={weeklySnapshotQuery.isLoading}
+                isError={weeklySnapshotQuery.isError}
+                error={weeklySnapshotQuery.error}
+                onRetry={() => weeklySnapshotQuery.refetch()}
+            />
 
             {syncHealthQuery.data && (syncHealthQuery.data.isStale || syncHealthQuery.data.hasBlockedOrFailed) ? (
                 <StaleDataBanner />

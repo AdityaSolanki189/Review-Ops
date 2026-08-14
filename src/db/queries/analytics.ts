@@ -5,6 +5,7 @@ import { properties, reviews, reviewTopics, scrapeRuns } from '@/db/schema'
 import { cachedQuery } from '@/lib/cache/cached'
 import type { ReviewSentiment, ReviewTopicKey } from '@/lib/classification/topics'
 import { decodeReviewCursor, encodeReviewCursor, type RatingBand, type ReviewSort } from '@/lib/reviews'
+import { calculateTopicSharePercentage, getSydneyWeekBounds } from '@/lib/weekly-snapshot'
 
 const CACHE_TTL = {
     properties: 3600,
@@ -18,6 +19,7 @@ const CACHE_TTL = {
     weeklySeries: 300,
     ratingDistribution: 300,
     weeklyBriefing: 3600,
+    weeklySnapshot: 300,
 } as const
 
 function startOfWeek(date: Date): Date {
@@ -210,6 +212,223 @@ async function loadNegativeTopicTrends(referenceDate: Date) {
 export async function getNegativeTopicTrends(referenceDate = new Date()) {
     return cachedQuery(`topics:neg:${weekKey(referenceDate)}`, CACHE_TTL.topicsNeg, () =>
         loadNegativeTopicTrends(referenceDate),
+    )
+}
+
+export interface WeeklySnapshotTopicInsight {
+    topic: ReviewTopicKey
+    count: number
+    totalReviews: number
+    percentage: number
+}
+
+export interface WeeklySnapshotPropertyRow {
+    slug: string
+    name: string
+    avgRating: number | null
+    previousAvgRating: number | null
+    delta: number | null
+    reviewCount: number
+    previousReviewCount: number
+}
+
+export interface WeeklySnapshot {
+    weekStart: string
+    weekEnd: string
+    previousWeekStart: string
+    previousWeekEnd: string
+    averageRating: {
+        value: number | null
+        previousValue: number | null
+        delta: number | null
+        reviewCount: number
+        previousReviewCount: number
+    }
+    properties: WeeklySnapshotPropertyRow[]
+    topNegativeTopic: WeeklySnapshotTopicInsight | null
+    topPositiveTopic: WeeklySnapshotTopicInsight | null
+}
+
+async function loadTopicInsightsForPeriod(input: {
+    from: Date
+    toExclusive: Date
+    minRating?: number
+    maxRating?: number
+    sentiment: ReviewSentiment
+}): Promise<WeeklySnapshotTopicInsight | null> {
+    const ratingConditions = []
+    if (input.minRating !== undefined) {
+        ratingConditions.push(gte(reviews.ratingNumeric, String(input.minRating)))
+    }
+    if (input.maxRating !== undefined) {
+        ratingConditions.push(lte(reviews.ratingNumeric, String(input.maxRating)))
+    }
+
+    const scopedReviews = await db
+        .select({ id: reviews.id })
+        .from(reviews)
+        .where(and(gte(reviews.reviewDate, input.from), lt(reviews.reviewDate, input.toExclusive), ...ratingConditions))
+
+    const totalReviews = scopedReviews.length
+    if (totalReviews === 0) return null
+
+    const reviewIds = scopedReviews.map((review) => review.id)
+    const [topTopic] = await db
+        .select({
+            topic: reviewTopics.topic,
+            count: count(),
+        })
+        .from(reviewTopics)
+        .where(and(inArray(reviewTopics.reviewId, reviewIds), eq(reviewTopics.sentiment, input.sentiment)))
+        .groupBy(reviewTopics.topic)
+        .orderBy(desc(count()))
+        .limit(1)
+
+    if (!topTopic) return null
+
+    const topicCount = Number(topTopic.count)
+    const percentage = calculateTopicSharePercentage(topicCount, totalReviews)
+    if (percentage === null) return null
+
+    return {
+        topic: topTopic.topic as ReviewTopicKey,
+        count: topicCount,
+        totalReviews,
+        percentage,
+    }
+}
+
+async function loadWeeklySnapshot(referenceDate: Date): Promise<WeeklySnapshot> {
+    const bounds = getSydneyWeekBounds(referenceDate)
+    const allProperties = await loadAllProperties()
+
+    const [thisWeekSummary, lastWeekSummary, thisWeekByProperty, lastWeekByProperty] = await Promise.all([
+        db
+            .select({
+                avgRating: sql<number | null>`avg(${reviews.ratingNumeric})`,
+                reviewCount: count(),
+            })
+            .from(reviews)
+            .where(
+                and(
+                    gte(reviews.reviewDate, bounds.thisWeekFromUtc),
+                    lt(reviews.reviewDate, bounds.thisWeekToExclusiveUtc),
+                ),
+            ),
+        db
+            .select({
+                avgRating: sql<number | null>`avg(${reviews.ratingNumeric})`,
+                reviewCount: count(),
+            })
+            .from(reviews)
+            .where(
+                and(
+                    gte(reviews.reviewDate, bounds.lastWeekFromUtc),
+                    lt(reviews.reviewDate, bounds.lastWeekToExclusiveUtc),
+                ),
+            ),
+        db
+            .select({
+                propertyId: reviews.propertyId,
+                avgRating: sql<number | null>`avg(${reviews.ratingNumeric})`,
+                reviewCount: count(),
+            })
+            .from(reviews)
+            .where(
+                and(
+                    gte(reviews.reviewDate, bounds.thisWeekFromUtc),
+                    lt(reviews.reviewDate, bounds.thisWeekToExclusiveUtc),
+                ),
+            )
+            .groupBy(reviews.propertyId),
+        db
+            .select({
+                propertyId: reviews.propertyId,
+                avgRating: sql<number | null>`avg(${reviews.ratingNumeric})`,
+                reviewCount: count(),
+            })
+            .from(reviews)
+            .where(
+                and(
+                    gte(reviews.reviewDate, bounds.lastWeekFromUtc),
+                    lt(reviews.reviewDate, bounds.lastWeekToExclusiveUtc),
+                ),
+            )
+            .groupBy(reviews.propertyId),
+    ])
+
+    const thisWeekCount = Number(thisWeekSummary[0]?.reviewCount ?? 0)
+    const lastWeekCount = Number(lastWeekSummary[0]?.reviewCount ?? 0)
+    const thisWeekAvg =
+        thisWeekCount === 0 || thisWeekSummary[0]?.avgRating === null || thisWeekSummary[0]?.avgRating === undefined
+            ? null
+            : Number(thisWeekSummary[0].avgRating)
+    const lastWeekAvg =
+        lastWeekCount === 0 || lastWeekSummary[0]?.avgRating === null || lastWeekSummary[0]?.avgRating === undefined
+            ? null
+            : Number(lastWeekSummary[0].avgRating)
+
+    const thisWeekMap = new Map(thisWeekByProperty.map((row) => [row.propertyId, row]))
+    const lastWeekMap = new Map(lastWeekByProperty.map((row) => [row.propertyId, row]))
+
+    const propertyRows: WeeklySnapshotPropertyRow[] = allProperties.map((property) => {
+        const current = thisWeekMap.get(property.id)
+        const previous = lastWeekMap.get(property.id)
+        const avgRating =
+            current?.avgRating === null || current?.avgRating === undefined ? null : Number(current.avgRating)
+        const previousAvgRating =
+            previous?.avgRating === null || previous?.avgRating === undefined ? null : Number(previous.avgRating)
+        const delta =
+            avgRating !== null && previousAvgRating !== null ? Number((avgRating - previousAvgRating).toFixed(2)) : null
+
+        return {
+            slug: property.slug,
+            name: property.name,
+            avgRating,
+            previousAvgRating,
+            delta,
+            reviewCount: Number(current?.reviewCount ?? 0),
+            previousReviewCount: Number(previous?.reviewCount ?? 0),
+        }
+    })
+
+    const [topNegativeTopic, topPositiveTopic] = await Promise.all([
+        loadTopicInsightsForPeriod({
+            from: bounds.thisWeekFromUtc,
+            toExclusive: bounds.thisWeekToExclusiveUtc,
+            maxRating: 5,
+            sentiment: 'negative',
+        }),
+        loadTopicInsightsForPeriod({
+            from: bounds.thisWeekFromUtc,
+            toExclusive: bounds.thisWeekToExclusiveUtc,
+            minRating: 8,
+            sentiment: 'positive',
+        }),
+    ])
+
+    return {
+        weekStart: bounds.weekStart,
+        weekEnd: bounds.weekEnd,
+        previousWeekStart: bounds.previousWeekStart,
+        previousWeekEnd: bounds.previousWeekEnd,
+        averageRating: {
+            value: thisWeekAvg,
+            previousValue: lastWeekAvg,
+            delta: thisWeekAvg !== null && lastWeekAvg !== null ? Number((thisWeekAvg - lastWeekAvg).toFixed(2)) : null,
+            reviewCount: thisWeekCount,
+            previousReviewCount: lastWeekCount,
+        },
+        properties: propertyRows,
+        topNegativeTopic,
+        topPositiveTopic,
+    }
+}
+
+export async function getWeeklySnapshot(referenceDate = new Date()) {
+    const bounds = getSydneyWeekBounds(referenceDate)
+    return cachedQuery(`weekly-snapshot:${bounds.weekStart}`, CACHE_TTL.weeklySnapshot, () =>
+        loadWeeklySnapshot(referenceDate),
     )
 }
 

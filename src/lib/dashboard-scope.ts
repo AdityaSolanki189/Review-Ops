@@ -118,6 +118,13 @@ export function buildPropertyDetailUrl(scope: AnalyticsScope, slug: string): Rou
     return `/properties/${slug}?${params.toString()}` as Route
 }
 
+export function buildWeeklyReviewsUrl(weekStart: string, weekEnd: string): Route {
+    const params = new URLSearchParams()
+    params.set('from', weekStart)
+    params.set('to', weekEnd)
+    return `/reviews?${params.toString()}` as Route
+}
+
 export function shortPropertyName(name: string): string {
     return name.replace('Azzurro Pod Hotel - ', '').replace('Olympic Hotel ', 'Olympic ')
 }
