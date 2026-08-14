@@ -58,6 +58,7 @@ function createOverviewFixture(reviewCount = 20) {
             sampleSize: reviewCount,
             status: 'available' as const,
         },
+        sentimentMix: { positive: 40, neutral: 10, negative: 20 },
         positiveDrivers: [
             {
                 topic: 'location' as const,
@@ -79,6 +80,8 @@ function createOverviewFixture(reviewCount = 20) {
                 },
                 reviewActivity: { value: 8, previousValue: 6, delta: 2, sampleSize: 8, status: 'available' as const },
                 lowScoreRate: { value: 10, previousValue: 15, delta: -5, sampleSize: 8, status: 'available' as const },
+                classificationCoverage: 75,
+                sentimentMix: { positive: 20, neutral: 5, negative: 8 },
             },
             {
                 property: { slug: 'central-sydney', name: 'Central Sydney' },
@@ -91,6 +94,8 @@ function createOverviewFixture(reviewCount = 20) {
                 },
                 reviewActivity: { value: 6, previousValue: 7, delta: -1, sampleSize: 6, status: 'available' as const },
                 lowScoreRate: { value: 40, previousValue: 25, delta: 15, sampleSize: 6, status: 'available' as const },
+                classificationCoverage: 83,
+                sentimentMix: { positive: 20, neutral: 5, negative: 12 },
             },
         ],
     }

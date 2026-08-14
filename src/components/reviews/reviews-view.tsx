@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import type { Route } from 'next'
-import { useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { EmptyState, ReviewCard } from '@/components/dashboard/dashboard-parts'
 import { PageIntro } from '@/components/layout/page-intro'
@@ -117,11 +116,8 @@ export function ReviewsView() {
     const isLoading = propertiesQuery.isLoading || (isSearchMode ? searchQueryResult.isLoading : reviewsQuery.isLoading)
     const isError = propertiesQuery.isError || (isSearchMode ? searchQueryResult.isError : reviewsQuery.isError)
     const error = propertiesQuery.error ?? (isSearchMode ? searchQueryResult.error : reviewsQuery.error)
-    const [pagination, setPagination] = useState({ filterSearch: '', pageIndex: 0 })
-    const filterSearch = searchParams.toString()
-    const pageIndex = pagination.filterSearch === filterSearch ? pagination.pageIndex : 0
     const pages = reviewsQuery.data?.pages ?? []
-    const listReviews = pages[pageIndex]?.items ?? []
+    const listReviews = pages.flatMap((page) => page.items)
     const searchReviews = searchQueryResult.data?.items ?? []
     const reviews: Array<ReviewListItem & { similarity?: number | null }> = isSearchMode
         ? (searchReviews as Array<ReviewListItem & { similarity?: number | null }>)
@@ -187,7 +183,7 @@ export function ReviewsView() {
                     <p className="text-sm font-medium">
                         {reviews.length === 0
                             ? '0 reviews found'
-                            : `${reviews.length} review${reviews.length === 1 ? '' : 's'}${isSearchMode ? ' matched' : ' on this page'}`}
+                            : `${reviews.length} review${reviews.length === 1 ? '' : 's'}${isSearchMode ? ' matched' : ' loaded'}`}
                         {activeFilters.length > 0 ? ' with filters applied' : ''}
                     </p>
                 ) : (
@@ -234,36 +230,15 @@ export function ReviewsView() {
                             )}
                         </div>
 
-                        {!isSearchMode && pages.length > 0 ? (
-                            <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                        {!isSearchMode && listReviews.length > 0 && reviewsQuery.hasNextPage ? (
+                            <div className="flex justify-center">
                                 <Button
                                     variant="outline"
                                     className="min-h-11 w-full sm:w-auto"
-                                    disabled={pageIndex === 0 || reviewsQuery.isFetchingNextPage}
-                                    onClick={() =>
-                                        setPagination({ filterSearch, pageIndex: Math.max(0, pageIndex - 1) })
-                                    }
+                                    disabled={reviewsQuery.isFetchingNextPage}
+                                    onClick={() => void reviewsQuery.fetchNextPage()}
                                 >
-                                    Previous page
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    className="min-h-11 w-full sm:w-auto"
-                                    disabled={
-                                        reviewsQuery.isFetchingNextPage ||
-                                        (!pages[pageIndex + 1] && !reviewsQuery.hasNextPage)
-                                    }
-                                    onClick={() => {
-                                        if (pages[pageIndex + 1]) {
-                                            setPagination({ filterSearch, pageIndex: pageIndex + 1 })
-                                            return
-                                        }
-                                        void reviewsQuery
-                                            .fetchNextPage()
-                                            .then(() => setPagination({ filterSearch, pageIndex: pageIndex + 1 }))
-                                    }}
-                                >
-                                    {reviewsQuery.isFetchingNextPage ? 'Loading...' : 'Next page'}
+                                    {reviewsQuery.isFetchingNextPage ? 'Loading...' : 'Load more'}
                                 </Button>
                             </div>
                         ) : null}

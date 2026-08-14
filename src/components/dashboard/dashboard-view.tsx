@@ -4,9 +4,14 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useSearchParams } from 'next/navigation'
-import { AlertTriangle, BarChart3, Inbox, MessageSquare, Star, ThumbsDown } from 'lucide-react'
+import { AlertTriangle, BarChart3, Inbox, Info, MessageSquare, Star, ThumbsDown } from 'lucide-react'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
-import { PeriodRatingTrendChart, RatingBandDistributionChart } from '@/components/dashboard/dashboard-charts'
+import { NeedsAttentionCard } from '@/components/dashboard/needs-attention-card'
+import {
+    PeriodRatingTrendChart,
+    RatingBandDistributionChart,
+    SentimentPieChart,
+} from '@/components/dashboard/dashboard-charts'
 import {
     EmptyState,
     FreshnessStrip,
@@ -21,10 +26,9 @@ import { SyncHealthList } from '@/components/dashboard/sync-health-list'
 import { WeeklySnapshotCard } from '@/components/dashboard/weekly-snapshot-card'
 import { QueryState, RefreshButton } from '@/components/query-state'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatTopicLabel } from '@/lib/classification/topics'
 import type { ReviewTopicKey } from '@/lib/classification/topics'
@@ -32,7 +36,6 @@ import {
     buildPortfolioStatus,
     formatMetricDelta,
     formatMetricValue,
-    isAnomalyIssue,
     portfolioAverageRating,
     propertyVsPortfolioGap,
 } from '@/lib/dashboard-status'
@@ -222,176 +225,7 @@ export function DashboardView() {
                             </Card>
                         }
                     >
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Needs attention</CardTitle>
-                                <CardDescription>
-                                    Negative topic momentum ranked by percentage-point change. Rating gap shows
-                                    association, not causality.
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                {issues.length === 0 ? (
-                                    <EmptyState
-                                        icon={Inbox}
-                                        message="No major operational issue spikes detected in this period."
-                                    />
-                                ) : (
-                                    <>
-                                        <div className="space-y-3 md:hidden">
-                                            {issues.slice(0, 8).map((issue) => (
-                                                <div
-                                                    key={`${issue.propertySlug}-${issue.topic}-mobile`}
-                                                    className="rounded-lg border p-4 text-sm"
-                                                >
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <div>
-                                                            <Link
-                                                                href={buildReviewsDrillDownUrl({
-                                                                    scope,
-                                                                    property: issue.propertySlug,
-                                                                    topic: issue.topic,
-                                                                    sentiment: 'negative',
-                                                                    representative: true,
-                                                                })}
-                                                                className="font-medium hover:underline"
-                                                            >
-                                                                {formatPropertySlug(issue.propertySlug)}
-                                                            </Link>
-                                                            <p className="mt-1 text-muted-foreground">
-                                                                {formatTopicLabel(issue.topic)}
-                                                            </p>
-                                                        </div>
-                                                        {issue.momentumPercentagePoints !== null ? (
-                                                            <span className="shrink-0 font-mono text-xs tabular-nums">
-                                                                {issue.momentumPercentagePoints >= 0 ? '+' : ''}
-                                                                {issue.momentumPercentagePoints.toFixed(1)} pp
-                                                            </span>
-                                                        ) : null}
-                                                    </div>
-                                                    {isAnomalyIssue(issue) ? (
-                                                        <Badge variant="destructive" className="mt-2">
-                                                            Anomaly
-                                                        </Badge>
-                                                    ) : null}
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="mt-3 min-h-11 w-full"
-                                                        onClick={() =>
-                                                            setExplainerTarget({
-                                                                propertySlug: issue.propertySlug,
-                                                                topic: issue.topic,
-                                                            })
-                                                        }
-                                                    >
-                                                        Explain
-                                                    </Button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <div className="hidden overflow-x-auto md:block">
-                                            <Table>
-                                                <TableHeader>
-                                                    <TableRow>
-                                                        <TableHead>Property</TableHead>
-                                                        <TableHead>Topic</TableHead>
-                                                        <TableHead title="Negative mentions as % of all reviews in period">
-                                                            Of all reviews
-                                                        </TableHead>
-                                                        <TableHead title="Negative mentions as % of low-score reviews (≤5)">
-                                                            Of low scores
-                                                        </TableHead>
-                                                        <TableHead>Change</TableHead>
-                                                        <TableHead>Rating gap</TableHead>
-                                                        <TableHead>Sample</TableHead>
-                                                        <TableHead>Latest</TableHead>
-                                                        <TableHead />
-                                                    </TableRow>
-                                                </TableHeader>
-                                                <TableBody>
-                                                    {issues.slice(0, 8).map((issue) => {
-                                                        const href = buildReviewsDrillDownUrl({
-                                                            scope,
-                                                            property: issue.propertySlug,
-                                                            topic: issue.topic,
-                                                            sentiment: 'negative',
-                                                            representative: true,
-                                                        })
-                                                        return (
-                                                            <TableRow key={`${issue.propertySlug}-${issue.topic}`}>
-                                                                <TableCell>
-                                                                    <Link
-                                                                        href={href}
-                                                                        className="font-medium hover:underline"
-                                                                    >
-                                                                        {formatPropertySlug(issue.propertySlug)}
-                                                                    </Link>
-                                                                </TableCell>
-                                                                <TableCell>{formatTopicLabel(issue.topic)}</TableCell>
-                                                                <TableCell className="font-mono tabular-nums">
-                                                                    {issue.portfolioNegativeShare !== null
-                                                                        ? `${issue.portfolioNegativeShare.toFixed(1)}%`
-                                                                        : 'n/a'}
-                                                                </TableCell>
-                                                                <TableCell className="font-mono tabular-nums">
-                                                                    {issue.negativeReviewShare !== null
-                                                                        ? `${issue.negativeReviewShare.toFixed(1)}%`
-                                                                        : 'n/a'}
-                                                                </TableCell>
-                                                                <TableCell className="font-mono tabular-nums">
-                                                                    {issue.momentumPercentagePoints !== null
-                                                                        ? `${issue.momentumPercentagePoints >= 0 ? '+' : ''}${issue.momentumPercentagePoints.toFixed(1)} pp`
-                                                                        : 'n/a'}
-                                                                    {isAnomalyIssue(issue) ? (
-                                                                        <Badge variant="destructive" className="ml-2">
-                                                                            Anomaly
-                                                                        </Badge>
-                                                                    ) : null}
-                                                                </TableCell>
-                                                                <TableCell className="font-mono tabular-nums">
-                                                                    {issue.ratingGap !== null
-                                                                        ? `${issue.ratingGap >= 0 ? '+' : ''}${issue.ratingGap.toFixed(1)}`
-                                                                        : 'n/a'}
-                                                                </TableCell>
-                                                                <TableCell className="font-mono tabular-nums">
-                                                                    {issue.sampleSize}
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    {issue.latestReviewAt
-                                                                        ? format(
-                                                                              new Date(issue.latestReviewAt),
-                                                                              'd MMM yyyy',
-                                                                          )
-                                                                        : '-'}
-                                                                </TableCell>
-                                                                <TableCell>
-                                                                    <Button
-                                                                        type="button"
-                                                                        variant="ghost"
-                                                                        size="sm"
-                                                                        className="h-9 transition-transform duration-150 ease-[var(--ease-out)] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
-                                                                        onClick={() =>
-                                                                            setExplainerTarget({
-                                                                                propertySlug: issue.propertySlug,
-                                                                                topic: issue.topic,
-                                                                            })
-                                                                        }
-                                                                    >
-                                                                        Explain
-                                                                    </Button>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )
-                                                    })}
-                                                </TableBody>
-                                            </Table>
-                                        </div>
-                                    </>
-                                )}
-                            </CardContent>
-                        </Card>
+                        <NeedsAttentionCard issues={issues} scope={scope} onExplain={setExplainerTarget} />
                     </QueryState>
 
                     <div className="grid gap-6 md:grid-cols-2">
@@ -804,9 +638,9 @@ export function DashboardView() {
                         <Card>
                             <CardHeader>
                                 <CardTitle>Coverage</CardTitle>
-                                <CardDescription>Data quality and score mix for this period</CardDescription>
+                                <CardDescription>Classification and topic sentiment for this period</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4">
+                            <CardContent className="space-y-6">
                                 <SignalBar
                                     label="Classification coverage"
                                     value={
@@ -817,30 +651,27 @@ export function DashboardView() {
                                     percentage={overview.classificationCoverage.value ?? 0}
                                     tone="primary"
                                 />
-                                <SignalBar
-                                    label="Low-score rate"
-                                    value={
-                                        overview.lowScoreRate.value === null
-                                            ? 'n/a'
-                                            : `${overview.lowScoreRate.value.toFixed(1)}%`
-                                    }
-                                    percentage={overview.lowScoreRate.value ?? 0}
-                                    tone="warning"
-                                />
-                                <SignalBar
-                                    label="Average rating"
-                                    value={
-                                        overview.averageRating.value === null
-                                            ? 'n/a'
-                                            : `${overview.averageRating.value.toFixed(1)} / 10`
-                                    }
-                                    percentage={
-                                        overview.averageRating.value !== null
-                                            ? (overview.averageRating.value / 10) * 100
-                                            : 0
-                                    }
-                                    tone="success"
-                                />
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-1">
+                                        <p className="text-sm font-medium">Sentiment</p>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <button
+                                                    type="button"
+                                                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
+                                                    aria-label="About sentiment mix"
+                                                >
+                                                    <Info className="size-4" aria-hidden />
+                                                </button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="top" className="max-w-xs text-sm">
+                                                Share of classified topic mentions in this property and period. A review
+                                                with mixed topics can contribute to more than one slice.
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </div>
+                                    <SentimentPieChart mix={overview.sentimentMix} />
+                                </div>
                             </CardContent>
                         </Card>
                     ) : null}
@@ -1049,11 +880,4 @@ export function DashboardView() {
             ) : null}
         </div>
     )
-}
-
-function formatPropertySlug(slug: string): string {
-    return slug
-        .split('-')
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ')
 }

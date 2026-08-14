@@ -111,9 +111,22 @@ describe('mapOverviewResponse', () => {
                 { slug: 'central-sydney', name: 'Central Sydney', averageRating: 7, reviewCount: 10, lowScoreCount: 3 },
                 { slug: 'potts-point', name: 'Potts Point', averageRating: 6, reviewCount: 7, lowScoreCount: 3 },
             ],
+            sentimentMix: { positive: 12, neutral: 4, negative: 6 },
+            sentimentMixByProperty: new Map([
+                ['central-sydney', { positive: 12, neutral: 4, negative: 6 }],
+                ['potts-point', { positive: 0, neutral: 0, negative: 0 }],
+            ]),
+            classifiedByProperty: [{ slug: 'central-sydney', reviewCount: 8 }],
         })
 
         assert.deepEqual(result.scope, scope.public)
+        assert.deepEqual(result.sentimentMix, { positive: 12, neutral: 4, negative: 6 })
+        assert.equal(result.propertyComparison[0]?.classificationCoverage, 80)
+        assert.deepEqual(result.propertyComparison[0]?.sentimentMix, {
+            positive: 12,
+            neutral: 4,
+            negative: 6,
+        })
         assert.deepEqual(result.topNegativeTopic, {
             topic: 'noise',
             negativeMentionRate: 20,

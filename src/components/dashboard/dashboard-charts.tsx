@@ -1,7 +1,8 @@
 'use client'
 
 import { format } from 'date-fns'
-import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from 'recharts'
+import { EmptyState } from '@/components/dashboard/dashboard-parts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
     ChartContainer,
@@ -30,6 +31,81 @@ const distributionConfig = {
         color: 'var(--chart-2)',
     },
 } satisfies ChartConfig
+
+const sentimentConfig = {
+    positive: {
+        label: 'Positive',
+        color: 'var(--success)',
+    },
+    neutral: {
+        label: 'Neutral',
+        color: 'var(--muted-foreground)',
+    },
+    negative: {
+        label: 'Negative',
+        color: 'var(--destructive)',
+    },
+} satisfies ChartConfig
+
+export function SentimentPieChart({
+    mix,
+    compact = false,
+}: {
+    mix: { positive: number; neutral: number; negative: number }
+    compact?: boolean
+}) {
+    const total = mix.positive + mix.neutral + mix.negative
+    if (total === 0) {
+        return compact ? (
+            <p className="text-xs text-muted-foreground">No classified mentions</p>
+        ) : (
+            <EmptyState message="No classified topic mentions in this period." />
+        )
+    }
+
+    const chartData = [
+        { key: 'positive', value: mix.positive, fill: 'var(--color-positive)' },
+        { key: 'neutral', value: mix.neutral, fill: 'var(--color-neutral)' },
+        { key: 'negative', value: mix.negative, fill: 'var(--color-negative)' },
+    ].filter((row) => row.value > 0)
+
+    const heightClass = compact ? 'h-24 w-24' : 'h-[180px] w-full'
+
+    return (
+        <ChartContainer config={sentimentConfig} className={heightClass}>
+            <PieChart>
+                <ChartTooltip
+                    content={
+                        <ChartTooltipContent
+                            formatter={(value, name) => {
+                                const count = Number(value)
+                                const pct = total > 0 ? ((count / total) * 100).toFixed(1) : '0'
+                                return [
+                                    `${count} (${pct}%)`,
+                                    sentimentConfig[name as keyof typeof sentimentConfig]?.label ?? name,
+                                ]
+                            }}
+                        />
+                    }
+                />
+                {!compact ? <ChartLegend content={<ChartLegendContent nameKey="key" />} /> : null}
+                <Pie
+                    data={chartData}
+                    dataKey="value"
+                    nameKey="key"
+                    innerRadius={compact ? '55%' : '45%'}
+                    outerRadius={compact ? '90%' : '80%'}
+                    strokeWidth={1}
+                    stroke="var(--background)"
+                >
+                    {chartData.map((entry) => (
+                        <Cell key={entry.key} fill={entry.fill} />
+                    ))}
+                </Pie>
+            </PieChart>
+        </ChartContainer>
+    )
+}
 
 export function PeriodRatingTrendChart({
     rating,

@@ -68,6 +68,64 @@ async function getClassifiedReviewCount(scope: ResolvedAnalyticsScope, period: A
     return number(row?.count)
 }
 
+export interface SentimentMixRow {
+    positive: number
+    neutral: number
+    negative: number
+}
+
+function buildSentimentMix(
+    rows: Array<{ sentiment: 'positive' | 'negative' | 'neutral'; count: number }>,
+): SentimentMixRow {
+    const mix: SentimentMixRow = { positive: 0, neutral: 0, negative: 0 }
+    for (const row of rows) {
+        mix[row.sentiment] = number(row.count)
+    }
+    return mix
+}
+
+async function getSentimentMix(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod): Promise<SentimentMixRow> {
+    const rows = await db
+        .select({
+            sentiment: reviewTopics.sentiment,
+            count: count(),
+        })
+        .from(reviewTopics)
+        .innerJoin(reviews, eq(reviews.id, reviewTopics.reviewId))
+        .innerJoin(properties, eq(properties.id, reviews.propertyId))
+        .where(scopeConditions(scope, period))
+        .groupBy(reviewTopics.sentiment)
+
+    return buildSentimentMix(
+        rows.map((row) => ({
+            sentiment: row.sentiment,
+            count: number(row.count),
+        })),
+    )
+}
+
+async function getSentimentMixByProperty(scope: ResolvedAnalyticsScope, period: AnalyticsPeriod) {
+    const rows = await db
+        .select({
+            slug: properties.slug,
+            sentiment: reviewTopics.sentiment,
+            count: count(),
+        })
+        .from(reviewTopics)
+        .innerJoin(reviews, eq(reviews.id, reviewTopics.reviewId))
+        .innerJoin(properties, eq(properties.id, reviews.propertyId))
+        .where(scopeConditions(scope, period))
+        .groupBy(properties.slug, reviewTopics.sentiment)
+
+    const byProperty = new Map<string, SentimentMixRow>()
+    for (const row of rows) {
+        const current = byProperty.get(row.slug) ?? { positive: 0, neutral: 0, negative: 0 }
+        current[row.sentiment] = number(row.count)
+        byProperty.set(row.slug, current)
+    }
+    return byProperty
+}
+
 async function getTopicsBySentiment(
     scope: ResolvedAnalyticsScope,
     period: AnalyticsPeriod,
@@ -141,6 +199,9 @@ export async function getDashboardOverview(scope: ResolvedAnalyticsScope) {
             previousPositiveTopics,
             propertyCurrent,
             propertyPrevious,
+            sentimentMix,
+            sentimentMixByProperty,
+            classifiedByProperty,
         ] = await Promise.all([
             getScopedProperties(scope),
             getPeriodSummary(scope, scope),
@@ -153,6 +214,9 @@ export async function getDashboardOverview(scope: ResolvedAnalyticsScope) {
             getPositiveTopics(scope, scope.previous),
             getPropertySummaries(scope, scope),
             getPropertySummaries(scope, scope.previous),
+            getSentimentMix(scope, scope),
+            getSentimentMixByProperty(scope, scope),
+            getPropertyClassificationCounts(scope),
         ])
 
         return mapOverviewResponse({
@@ -168,6 +232,9 @@ export async function getDashboardOverview(scope: ResolvedAnalyticsScope) {
             previousPositiveTopics,
             propertyCurrent,
             propertyPrevious,
+            sentimentMix,
+            sentimentMixByProperty,
+            classifiedByProperty,
         })
     })
 }

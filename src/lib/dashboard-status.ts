@@ -173,7 +173,8 @@ export function buildPortfolioStatus(overview: DashboardOverviewLike, issues: Is
 }
 
 export function formatMetricDelta(metric: Metric<number | null>, suffix = ''): string {
-    if (metric.status !== 'available' || metric.delta === null) return 'Not enough data'
+    if (metric.sampleSize === 0) return 'Not enough data'
+    if (metric.status !== 'available' || metric.delta === null) return ''
     return `${formatDelta(metric.delta, suffix)} vs previous`
 }
 

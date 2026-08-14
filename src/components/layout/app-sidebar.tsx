@@ -37,7 +37,7 @@ function SidebarCollapseToggle() {
         <button
             type="button"
             onClick={toggleSidebar}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-sidebar-foreground transition-[background-color,transform] duration-150 ease-[var(--ease-out)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
             aria-label={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
         >
             <span className="flex size-8 shrink-0 items-center justify-center">
@@ -96,7 +96,7 @@ export function AppSidebar() {
                                             </Link>
                                         </SidebarMenuButton>
                                         {showSyncBadge ? (
-                                            <SidebarMenuBadge className="bg-destructive text-destructive-foreground">
+                                            <SidebarMenuBadge className="bg-destructive text-destructive-foreground group-data-[collapsible=icon]:hidden">
                                                 {syncIssueCount}
                                             </SidebarMenuBadge>
                                         ) : null}

@@ -25,8 +25,10 @@ export function AppHeader() {
 
     return (
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-            <SidebarTrigger className="size-9 shrink-0" />
-            <Separator orientation="vertical" className="mr-1 h-6" />
+            <div className="flex shrink-0 items-center gap-3 md:hidden">
+                <SidebarTrigger className="size-9 shrink-0" />
+                <Separator orientation="vertical" className="h-6" />
+            </div>
             <div className="min-w-0 flex-1">
                 <h1 className="truncate text-base font-semibold tracking-tight">{meta.title}</h1>
                 {meta.subtitle ? (

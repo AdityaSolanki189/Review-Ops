@@ -45,6 +45,12 @@ export interface PropertyCountRow {
     reviewCount: number
 }
 
+export interface SentimentMix {
+    positive: number
+    neutral: number
+    negative: number
+}
+
 function toIsoString(value: Date | string | null | undefined): string | null {
     if (value === null || value === undefined) return null
     if (value instanceof Date) return value.toISOString()
@@ -65,11 +71,15 @@ export function mapOverviewResponse(input: {
     previousPositiveTopics: TopicCountRow[]
     propertyCurrent: PropertySummaryRow[]
     propertyPrevious: PropertySummaryRow[]
+    sentimentMix: SentimentMix
+    sentimentMixByProperty: Map<string, SentimentMix>
+    classifiedByProperty: PropertyCountRow[]
 }) {
     const previousTopics = new Map(input.previousTopics.map((row) => [row.topic, row.reviewCount]))
     const previousPositiveTopics = new Map(input.previousPositiveTopics.map((row) => [row.topic, row.reviewCount]))
     const currentByProperty = new Map(input.propertyCurrent.map((row) => [row.slug, row]))
     const previousByProperty = new Map(input.propertyPrevious.map((row) => [row.slug, row]))
+    const classifiedByProperty = new Map(input.classifiedByProperty.map((row) => [row.slug, row.reviewCount]))
     const topTopic = input.currentTopics[0]
     const topPositiveTopicRow = input.currentPositiveTopics[0]
     const topCurrentRate = topTopic ? calculateRate(topTopic.reviewCount, input.current.reviewCount) : null
@@ -157,6 +167,7 @@ export function mapOverviewResponse(input: {
             sampleSize: input.current.reviewCount,
             previousSampleSize: input.previous.reviewCount,
         }),
+        sentimentMix: input.sentimentMix,
         positiveDrivers: input.currentPositiveTopics.map((row) => {
             const previousCount = previousPositiveTopics.get(row.topic) ?? 0
             const currentRate = calculateRate(row.reviewCount, input.current.reviewCount)
@@ -201,6 +212,12 @@ export function mapOverviewResponse(input: {
                     sampleSize: currentReviewCount,
                     previousSampleSize: previousReviewCount,
                 }),
+                classificationCoverage: calculateRate(classifiedByProperty.get(property.slug) ?? 0, currentReviewCount),
+                sentimentMix: input.sentimentMixByProperty.get(property.slug) ?? {
+                    positive: 0,
+                    neutral: 0,
+                    negative: 0,
+                },
             }
         }),
     }
