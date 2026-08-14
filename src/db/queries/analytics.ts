@@ -621,7 +621,7 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
                 : [desc(reviews.reviewDate), desc(reviews.id)]
     const representativeRank = filters.representative ? getRepresentativeRank(filters) : null
     const orderBy = representativeRank
-        ? [asc(sql`representative_rank`), asc(reviews.ratingNumeric), desc(reviews.reviewDate), desc(reviews.id)]
+        ? [asc(representativeRank), asc(reviews.ratingNumeric), desc(reviews.reviewDate), desc(reviews.id)]
         : standardOrderBy
 
     const rows =
@@ -646,10 +646,18 @@ async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
                   .orderBy(...orderBy)
                   .limit(limit + 1)
             : await db
-                  .select({
-                      review: reviews,
-                      property: properties,
-                  })
+                  .select(
+                      representativeRank
+                          ? {
+                                review: reviews,
+                                property: properties,
+                                representativeRank,
+                            }
+                          : {
+                                review: reviews,
+                                property: properties,
+                            },
+                  )
                   .from(reviews)
                   .innerJoin(properties, eq(reviews.propertyId, properties.id))
                   .where(whereClause)

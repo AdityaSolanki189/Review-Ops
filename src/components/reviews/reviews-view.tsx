@@ -141,7 +141,7 @@ export function ReviewsView() {
     const properties = propertiesQuery.data ?? []
 
     return (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
             <PageIntro>Browse, filter, or semantically search guest reviews</PageIntro>
 
             {propertiesQuery.data ? <ReviewFiltersForm properties={propertiesQuery.data} params={params} /> : null}

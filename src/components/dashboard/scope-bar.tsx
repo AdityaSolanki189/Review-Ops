@@ -157,7 +157,11 @@ export function DashboardScopeBar({ properties, lockedPropertySlug }: DashboardS
                                         <span className="truncate">{customLabel}</span>
                                     </button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
+                                <PopoverContent
+                                    className="w-auto max-w-[calc(100vw-2rem)] overflow-x-auto p-0"
+                                    align="start"
+                                    collisionPadding={12}
+                                >
                                     <Calendar
                                         mode="range"
                                         defaultMonth={pendingRange?.from ?? todayDate}

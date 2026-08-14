@@ -218,12 +218,16 @@ export function MetricCard({
                         />
                     ) : null}
                 </div>
-                <div>
+                <div className="min-w-0">
                     <p className="text-sm font-medium text-muted-foreground">{title}</p>
-                    <div className="mt-1 flex items-end justify-between gap-4">
-                        <div>
-                            <p className="font-mono text-2xl font-semibold tabular-nums tracking-tight">{value}</p>
-                            {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+                    <div className="mt-1 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+                        <div className="min-w-0">
+                            <p className="break-words font-mono text-2xl font-semibold tabular-nums tracking-tight">
+                                {value}
+                            </p>
+                            {subtitle ? (
+                                <p className="mt-1 break-words text-sm text-muted-foreground">{subtitle}</p>
+                            ) : null}
                         </div>
                         {showDelta ? (
                             <Badge

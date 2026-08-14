@@ -25,7 +25,7 @@ export function SyncView() {
     const blockedCount = countByStatus(runs, 'blocked')
 
     return (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
             <PageIntro
                 action={
                     <div className="w-full sm:w-auto">

@@ -56,7 +56,7 @@ export function PropertyDetailView({ slug }: PropertyDetailViewProps) {
     }
 
     return (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
             {propertiesQuery.data ? (
                 <DashboardScopeBar properties={propertiesQuery.data} lockedPropertySlug={slug} />
             ) : null}
@@ -115,7 +115,7 @@ export function PropertyDetailView({ slug }: PropertyDetailViewProps) {
                 {overviewQuery.data ? <PropertyKpiRow overview={overviewQuery.data} /> : null}
             </QueryState>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid min-w-0 gap-6 md:grid-cols-2">
                 <QueryState
                     isLoading={seriesQuery.isLoading}
                     isError={seriesQuery.isError}
@@ -210,35 +210,68 @@ export function PropertyDetailView({ slug }: PropertyDetailViewProps) {
                                 Negative topics that correlate with lower scores at this property
                             </CardDescription>
                         </CardHeader>
-                        <CardContent className="overflow-x-auto">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Topic</TableHead>
-                                        <TableHead>Mentions</TableHead>
-                                        <TableHead>Avg rating</TableHead>
-                                        <TableHead>Gap</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {topicImpactQuery.data.topics.slice(0, 6).map((row) => (
-                                        <TableRow key={row.topic}>
-                                            <TableCell>{formatTopicLabel(row.topic as ReviewTopicKey)}</TableCell>
-                                            <TableCell className="font-mono tabular-nums">
-                                                {row.negativeReviewCount}
-                                            </TableCell>
-                                            <TableCell className="font-mono tabular-nums">
-                                                {row.averageRating?.toFixed(1) ?? 'n/a'}
-                                            </TableCell>
-                                            <TableCell className="font-mono tabular-nums">
-                                                {row.ratingGap !== null
-                                                    ? `${row.ratingGap >= 0 ? '+' : ''}${row.ratingGap.toFixed(1)}`
-                                                    : 'n/a'}
-                                            </TableCell>
+                        <CardContent>
+                            <div className="space-y-3 md:hidden">
+                                {topicImpactQuery.data.topics.slice(0, 6).map((row) => (
+                                    <div key={`${row.topic}-mobile`} className="rounded-lg border p-4 text-sm">
+                                        <p className="break-words font-medium">
+                                            {formatTopicLabel(row.topic as ReviewTopicKey)}
+                                        </p>
+                                        <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-muted-foreground">
+                                            <div>
+                                                <dt>Mentions</dt>
+                                                <dd className="font-mono tabular-nums text-foreground">
+                                                    {row.negativeReviewCount}
+                                                </dd>
+                                            </div>
+                                            <div>
+                                                <dt>Avg rating</dt>
+                                                <dd className="font-mono tabular-nums text-foreground">
+                                                    {row.averageRating?.toFixed(1) ?? 'n/a'}
+                                                </dd>
+                                            </div>
+                                            <div className="col-span-2">
+                                                <dt>Gap</dt>
+                                                <dd className="font-mono tabular-nums text-foreground">
+                                                    {row.ratingGap !== null
+                                                        ? `${row.ratingGap >= 0 ? '+' : ''}${row.ratingGap.toFixed(1)}`
+                                                        : 'n/a'}
+                                                </dd>
+                                            </div>
+                                        </dl>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="hidden overflow-x-auto md:block">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Topic</TableHead>
+                                            <TableHead>Mentions</TableHead>
+                                            <TableHead>Avg rating</TableHead>
+                                            <TableHead>Gap</TableHead>
                                         </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {topicImpactQuery.data.topics.slice(0, 6).map((row) => (
+                                            <TableRow key={row.topic}>
+                                                <TableCell>{formatTopicLabel(row.topic as ReviewTopicKey)}</TableCell>
+                                                <TableCell className="font-mono tabular-nums">
+                                                    {row.negativeReviewCount}
+                                                </TableCell>
+                                                <TableCell className="font-mono tabular-nums">
+                                                    {row.averageRating?.toFixed(1) ?? 'n/a'}
+                                                </TableCell>
+                                                <TableCell className="font-mono tabular-nums">
+                                                    {row.ratingGap !== null
+                                                        ? `${row.ratingGap >= 0 ? '+' : ''}${row.ratingGap.toFixed(1)}`
+                                                        : 'n/a'}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
                         </CardContent>
                     </Card>
                 ) : null}

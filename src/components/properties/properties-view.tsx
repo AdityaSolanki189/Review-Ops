@@ -34,7 +34,7 @@ export function PropertiesView() {
     const overviewQuery = useDashboardOverviewQuery(scope)
 
     return (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
             <PageIntro>Performance across the four Azzurro Sydney properties</PageIntro>
 
             {propertiesQuery.data ? <DashboardScopeBar properties={propertiesQuery.data} /> : null}

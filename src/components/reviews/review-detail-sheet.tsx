@@ -164,7 +164,9 @@ export function ReviewDetailSheet({
                 )}
             >
                 <SheetHeader className="shrink-0 border-b px-6 py-6 pr-12 text-left">
-                    <SheetTitle className="text-base leading-snug">{review.title ?? 'Guest review'}</SheetTitle>
+                    <SheetTitle className="break-words text-base leading-snug">
+                        {review.title ?? 'Guest review'}
+                    </SheetTitle>
                     <SheetDescription>
                         {review.property.name} · {format(new Date(review.reviewDate), 'dd MMM yyyy')} ·{' '}
                         <span className="font-mono tabular-nums">{review.rating}/10</span>

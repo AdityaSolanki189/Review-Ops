@@ -13,6 +13,7 @@ import {
     type ChartConfig,
 } from '@/components/ui/chart'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 const ratingTrendConfig = {
     avgRating: {
@@ -69,7 +70,7 @@ export function SentimentPieChart({
         { key: 'negative', value: mix.negative, fill: 'var(--color-negative)' },
     ]
 
-    const heightClass = compact ? 'h-24 w-24' : 'h-[180px] w-full'
+    const heightClass = compact ? 'h-24 w-24' : 'aspect-auto h-[180px] min-w-0 w-full'
 
     return (
         <ChartContainer config={sentimentConfig} className={heightClass}>
@@ -116,6 +117,7 @@ export function PeriodRatingTrendChart({
     reviewVolume: Array<{ bucket: string; value: number }>
     granularity: 'day' | 'week'
 }) {
+    const isMobile = useIsMobile()
     const volumeByBucket = new Map(reviewVolume.map((row) => [row.bucket, row.value]))
     const chartData = rating.map((row) => ({
         period: format(new Date(`${row.bucket}T00:00:00`), granularity === 'day' ? 'd MMM' : 'd MMM'),
@@ -124,12 +126,26 @@ export function PeriodRatingTrendChart({
     }))
 
     return (
-        <ChartContainer config={ratingTrendConfig} className="aspect-auto h-[280px] w-full">
-            <LineChart data={chartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
+        <ChartContainer config={ratingTrendConfig} className="aspect-auto h-[220px] min-w-0 w-full sm:h-[280px]">
+            <LineChart data={chartData} margin={{ left: 4, right: isMobile ? 4 : 8, top: 8, bottom: 0 }}>
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="period" tickLine={false} axisLine={false} tickMargin={8} />
-                <YAxis yAxisId="rating" domain={[0, 10]} tickLine={false} axisLine={false} width={32} />
-                <YAxis yAxisId="count" orientation="right" tickLine={false} axisLine={false} width={32} />
+                <XAxis
+                    dataKey="period"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    minTickGap={isMobile ? 24 : 8}
+                    interval={isMobile ? 'preserveStartEnd' : undefined}
+                />
+                <YAxis yAxisId="rating" domain={[0, 10]} tickLine={false} axisLine={false} width={28} />
+                <YAxis
+                    yAxisId="count"
+                    orientation="right"
+                    tickLine={false}
+                    axisLine={false}
+                    width={isMobile ? 0 : 28}
+                    hide={isMobile}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <ChartLegend content={<ChartLegendContent />} />
                 <Line
@@ -161,11 +177,11 @@ export function RatingBandDistributionChart({ data }: { data: Array<{ band: stri
     }))
 
     return (
-        <ChartContainer config={distributionConfig} className="aspect-auto h-[240px] w-full">
-            <BarChart data={chartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
+        <ChartContainer config={distributionConfig} className="aspect-auto h-[200px] min-w-0 w-full sm:h-[240px]">
+            <BarChart data={chartData} margin={{ left: 4, right: 4, top: 8, bottom: 0 }}>
                 <CartesianGrid vertical={false} />
-                <XAxis dataKey="band" tickLine={false} axisLine={false} tickMargin={8} />
-                <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} />
+                <XAxis dataKey="band" tickLine={false} axisLine={false} tickMargin={8} minTickGap={8} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Bar dataKey="count" fill="var(--color-count)" radius={4} />
             </BarChart>
@@ -181,7 +197,7 @@ export function ChartSectionSkeleton({ title }: { title: string }) {
                 <CardDescription>Loading chart data</CardDescription>
             </CardHeader>
             <CardContent>
-                <Skeleton className="h-[280px] w-full" />
+                <Skeleton className="h-[220px] w-full sm:h-[280px]" />
             </CardContent>
         </Card>
     )

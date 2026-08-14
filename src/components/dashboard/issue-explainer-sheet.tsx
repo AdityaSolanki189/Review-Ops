@@ -82,7 +82,7 @@ export function IssueExplainerSheet({ open, onOpenChange, scope, propertySlug, t
                 )}
             >
                 <SheetHeader className="shrink-0 border-b px-6 py-6 pr-12 text-left">
-                    <SheetTitle className="text-base leading-snug">
+                    <SheetTitle className="break-words text-base leading-snug">
                         {formatTopicLabel(topic)} at {propertyName}
                     </SheetTitle>
                     <SheetDescription>AI-assisted breakdown with verifiable guest excerpts below.</SheetDescription>

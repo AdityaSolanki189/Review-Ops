@@ -22,9 +22,6 @@ import {
 import { clientConfig } from '@/lib/config/client'
 import { useSyncHealthQuery } from '@/lib/queries/dashboard.queries'
 
-const navButtonClassName =
-    'group-data-[collapsible=icon]:!size-12 group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:justify-center'
-
 const navItems: Array<{ href: Route; label: string; icon: typeof BarChart3 }> = [
     { href: '/', label: 'Dashboard', icon: BarChart3 },
     { href: '/reviews', label: 'Reviews', icon: Star },
@@ -67,17 +64,12 @@ export function AppSidebar() {
             <SidebarHeader className="flex h-16 shrink-0 justify-center border-b border-sidebar-border px-2 py-0">
                 <SidebarMenu>
                     <SidebarMenuItem>
-                        <SidebarMenuButton
-                            size="lg"
-                            asChild
-                            tooltip={clientConfig.app.name}
-                            className={`${navButtonClassName} group-data-[collapsible=icon]:mx-auto`}
-                        >
+                        <SidebarMenuButton size="lg" asChild tooltip={clientConfig.app.name}>
                             <Link href="/">
                                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                                     <BarChart3 className="size-4" />
                                 </div>
-                                <div className="grid flex-1 text-left text-sm leading-tight">
+                                <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                                     <span className="truncate font-semibold">{clientConfig.app.name}</span>
                                     <span className="truncate text-xs text-muted-foreground">Azzurro Hotels</span>
                                 </div>
@@ -97,16 +89,12 @@ export function AppSidebar() {
                                 const showSyncBadge = item.href === '/sync' && syncIssueCount > 0
                                 return (
                                     <SidebarMenuItem key={item.href}>
-                                        <SidebarMenuButton
-                                            asChild
-                                            isActive={active}
-                                            tooltip={item.label}
-                                            size="lg"
-                                            className={navButtonClassName}
-                                        >
+                                        <SidebarMenuButton asChild isActive={active} tooltip={item.label} size="lg">
                                             <Link href={item.href}>
                                                 <Icon />
-                                                <span>{item.label}</span>
+                                                <span className="group-data-[collapsible=icon]:hidden">
+                                                    {item.label}
+                                                </span>
                                             </Link>
                                         </SidebarMenuButton>
                                         {showSyncBadge ? (

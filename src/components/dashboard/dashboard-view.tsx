@@ -115,7 +115,7 @@ export function DashboardView() {
     const statusSignals = overview ? buildPortfolioStatus(overview, issues) : []
 
     return (
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
             {/* Toolbar */}
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 space-y-2">
@@ -139,7 +139,7 @@ export function DashboardView() {
                         ) : null}
                     </QueryState>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
+                <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
                     <p className="text-sm text-muted-foreground">Updated {format(new Date(), 'dd MMM yyyy, HH:mm')}</p>
                     <RefreshButton onClick={() => invalidateCache.mutate()} isPending={invalidateCache.isPending} />
                 </div>
@@ -223,9 +223,9 @@ export function DashboardView() {
             </QueryState>
 
             {/* Main grid: primary + right rail */}
-            <div className="grid gap-6 xl:grid-cols-3">
+            <div className="grid min-w-0 gap-6 xl:grid-cols-3">
                 {/* Primary column */}
-                <div className="space-y-6 xl:col-span-2">
+                <div className="min-w-0 space-y-6 xl:col-span-2">
                     <QueryState
                         isLoading={issuesQuery.isLoading}
                         isError={issuesQuery.isError}
@@ -245,7 +245,7 @@ export function DashboardView() {
                         <NeedsAttentionCard issues={issues} scope={scope} onExplain={setExplainerTarget} />
                     </QueryState>
 
-                    <div className="grid gap-6 md:grid-cols-2">
+                    <div className="grid min-w-0 gap-6 md:grid-cols-2">
                         <QueryState
                             isLoading={seriesQuery.isLoading}
                             isError={seriesQuery.isError}
@@ -500,39 +500,80 @@ export function DashboardView() {
                                         causality)
                                     </CardDescription>
                                 </CardHeader>
-                                <CardContent className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Topic</TableHead>
-                                                <TableHead>Negative mentions</TableHead>
-                                                <TableHead>Avg rating</TableHead>
-                                                <TableHead>Rating gap</TableHead>
-                                                <TableHead>Impact score</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {topicImpactQuery.data.topics.slice(0, 8).map((row) => (
-                                                <TableRow key={row.topic}>
-                                                    <TableCell>{formatTopicLabel(row.topic)}</TableCell>
-                                                    <TableCell className="font-mono tabular-nums">
-                                                        {row.negativeReviewCount}
-                                                    </TableCell>
-                                                    <TableCell className="font-mono tabular-nums">
-                                                        {row.averageRating?.toFixed(1) ?? 'n/a'}
-                                                    </TableCell>
-                                                    <TableCell className="font-mono tabular-nums">
-                                                        {row.ratingGap !== null
-                                                            ? `${row.ratingGap >= 0 ? '+' : ''}${row.ratingGap.toFixed(1)}`
-                                                            : 'n/a'}
-                                                    </TableCell>
-                                                    <TableCell className="font-mono tabular-nums">
-                                                        {row.impactScore !== null ? row.impactScore.toFixed(1) : 'n/a'}
-                                                    </TableCell>
+                                <CardContent>
+                                    <div className="space-y-3 md:hidden">
+                                        {topicImpactQuery.data.topics.slice(0, 8).map((row) => (
+                                            <div key={`${row.topic}-mobile`} className="rounded-lg border p-4 text-sm">
+                                                <p className="break-words font-medium">{formatTopicLabel(row.topic)}</p>
+                                                <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-muted-foreground">
+                                                    <div>
+                                                        <dt>Negative mentions</dt>
+                                                        <dd className="font-mono tabular-nums text-foreground">
+                                                            {row.negativeReviewCount}
+                                                        </dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>Avg rating</dt>
+                                                        <dd className="font-mono tabular-nums text-foreground">
+                                                            {row.averageRating?.toFixed(1) ?? 'n/a'}
+                                                        </dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>Rating gap</dt>
+                                                        <dd className="font-mono tabular-nums text-foreground">
+                                                            {row.ratingGap !== null
+                                                                ? `${row.ratingGap >= 0 ? '+' : ''}${row.ratingGap.toFixed(1)}`
+                                                                : 'n/a'}
+                                                        </dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt>Impact score</dt>
+                                                        <dd className="font-mono tabular-nums text-foreground">
+                                                            {row.impactScore !== null
+                                                                ? row.impactScore.toFixed(1)
+                                                                : 'n/a'}
+                                                        </dd>
+                                                    </div>
+                                                </dl>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="hidden overflow-x-auto md:block">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Topic</TableHead>
+                                                    <TableHead>Negative mentions</TableHead>
+                                                    <TableHead>Avg rating</TableHead>
+                                                    <TableHead>Rating gap</TableHead>
+                                                    <TableHead>Impact score</TableHead>
                                                 </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {topicImpactQuery.data.topics.slice(0, 8).map((row) => (
+                                                    <TableRow key={row.topic}>
+                                                        <TableCell>{formatTopicLabel(row.topic)}</TableCell>
+                                                        <TableCell className="font-mono tabular-nums">
+                                                            {row.negativeReviewCount}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono tabular-nums">
+                                                            {row.averageRating?.toFixed(1) ?? 'n/a'}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono tabular-nums">
+                                                            {row.ratingGap !== null
+                                                                ? `${row.ratingGap >= 0 ? '+' : ''}${row.ratingGap.toFixed(1)}`
+                                                                : 'n/a'}
+                                                        </TableCell>
+                                                        <TableCell className="font-mono tabular-nums">
+                                                            {row.impactScore !== null
+                                                                ? row.impactScore.toFixed(1)
+                                                                : 'n/a'}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </CardContent>
                             </Card>
                         ) : null}
@@ -583,7 +624,7 @@ export function DashboardView() {
                 </div>
 
                 {/* Right rail */}
-                <div className="space-y-6">
+                <div className="min-w-0 space-y-6">
                     <QueryState
                         isLoading={briefingQuery.isLoading}
                         isError={briefingQuery.isError}
