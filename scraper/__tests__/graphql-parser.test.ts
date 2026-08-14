@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { shouldStopAfterPage, setPaginationInBody } from '../graphql'
+import { estimateTotalPages, shouldStopAfterPage, setPaginationInBody } from '../graphql'
 import { parseGraphqlReviewCard } from '../parser'
 import type { GraphqlReviewCard } from '../graphql'
+import { computeResumeSkip } from '../watermark'
+import { SCRAPE_CONFIG } from '../selectors'
 
 const mackenzieCard: GraphqlReviewCard = {
     reviewScore: 8.0,
@@ -49,6 +51,16 @@ const kumarCard: GraphqlReviewCard = {
     },
 }
 
+const stopDefaults = {
+    consecutiveKnown: 0,
+    consecutiveKnownStop: 8,
+    skip: 0,
+    reviewsCount: 24,
+    pageSize: 10,
+    pageNumber: 1,
+    maxPagesSafety: SCRAPE_CONFIG.maxPagesSafety,
+}
+
 describe('parseGraphqlReviewCard', () => {
     it('maps Mackenzie review with unix timestamp and stay date', () => {
         const review = parseGraphqlReviewCard(mackenzieCard)
@@ -72,23 +84,54 @@ describe('parseGraphqlReviewCard', () => {
     })
 })
 
+describe('computeResumeSkip', () => {
+    it('returns stored skip in backfill mode when set', () => {
+        assert.equal(computeResumeSkip(500, 487, 10, true), 500)
+    })
+
+    it('derives skip from db count when stored skip is zero', () => {
+        assert.equal(computeResumeSkip(0, 487, 10, true), 480)
+    })
+
+    it('returns zero in incremental mode', () => {
+        assert.equal(computeResumeSkip(500, 487, 10, false), 0)
+    })
+})
+
 describe('shouldStopAfterPage', () => {
-    it('stops when newest card is at or before watermark', () => {
+    it('stops when newest card is at or before watermark in incremental mode', () => {
         const review = parseGraphqlReviewCard(mackenzieCard)
         assert.ok(review)
 
         const decision = shouldStopAfterPage({
             reviews: [review],
             watermark: review.reviewDate,
-            consecutiveKnown: 0,
-            consecutiveKnownStop: 8,
-            skip: 0,
-            reviewsCount: 24,
-            pageSize: 10,
+            backfillMode: false,
+            ...stopDefaults,
         })
 
         assert.equal(decision.stop, true)
         assert.equal(decision.reason, 'watermark')
+    })
+
+    it('continues past watermark in backfill mode', () => {
+        const review = parseGraphqlReviewCard(mackenzieCard)
+        assert.ok(review)
+
+        const decision = shouldStopAfterPage({
+            reviews: [review],
+            watermark: review.reviewDate,
+            backfillMode: true,
+            consecutiveKnown: 0,
+            consecutiveKnownStop: 8,
+            skip: 480,
+            reviewsCount: 2526,
+            pageSize: 10,
+            pageNumber: 49,
+            maxPagesSafety: SCRAPE_CONFIG.maxPagesSafety,
+        })
+
+        assert.equal(decision.stop, false)
     })
 
     it('continues when reviews are newer than watermark', () => {
@@ -98,19 +141,44 @@ describe('shouldStopAfterPage', () => {
         const decision = shouldStopAfterPage({
             reviews: [review],
             watermark: new Date(review.reviewDate.getTime() - 86_400_000),
-            consecutiveKnown: 0,
-            consecutiveKnownStop: 8,
-            skip: 0,
-            reviewsCount: 24,
-            pageSize: 10,
+            backfillMode: false,
+            ...stopDefaults,
         })
 
         assert.equal(decision.stop, false)
     })
+
+    it('stops at end of list in backfill mode', () => {
+        const review = parseGraphqlReviewCard(mackenzieCard)
+        assert.ok(review)
+
+        const decision = shouldStopAfterPage({
+            reviews: [review],
+            watermark: null,
+            backfillMode: true,
+            skip: 20,
+            reviewsCount: 24,
+            pageSize: 10,
+            pageNumber: 3,
+            consecutiveKnown: 0,
+            consecutiveKnownStop: 8,
+            maxPagesSafety: SCRAPE_CONFIG.maxPagesSafety,
+        })
+
+        assert.equal(decision.stop, true)
+        assert.equal(decision.reason, 'end_of_list')
+    })
+})
+
+describe('estimateTotalPages', () => {
+    it('computes pages from reviewsCount and page size', () => {
+        assert.equal(estimateTotalPages(4258, 25), 171)
+        assert.equal(estimateTotalPages(24, 10), 3)
+    })
 })
 
 describe('setPaginationInBody', () => {
-    it('updates skip and sorter fields in nested GraphQL variables', () => {
+    it('updates skip, sorter, and limit fields in nested GraphQL variables', () => {
         const body = JSON.stringify({
             operationName: 'ReviewList',
             variables: {
@@ -122,11 +190,12 @@ describe('setPaginationInBody', () => {
             },
         })
 
-        const updated = JSON.parse(setPaginationInBody(body, 20, 'NEWEST_FIRST')) as {
-            variables: { input: { skip: number; sorter: string } }
+        const updated = JSON.parse(setPaginationInBody(body, 20, 'NEWEST_FIRST', 25)) as {
+            variables: { input: { skip: number; sorter: string; limit: number } }
         }
 
         assert.equal(updated.variables.input.skip, 20)
         assert.equal(updated.variables.input.sorter, 'NEWEST_FIRST')
+        assert.equal(updated.variables.input.limit, 25)
     })
 })

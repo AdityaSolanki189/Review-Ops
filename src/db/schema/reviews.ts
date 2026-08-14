@@ -8,6 +8,7 @@ export const properties = pgTable('properties', {
     bookingUrl: text('booking_url').notNull(),
     bookingPropertyId: text('booking_property_id').notNull(),
     latestReviewAt: timestamp('latest_review_at', { withTimezone: true, mode: 'date' }),
+    backfillSkip: text('backfill_skip').notNull().default('0'),
     ...timestamps,
 })
 

@@ -9,7 +9,13 @@ import { createScrapeRun, finishScrapeRun, insertReview, reviewExists } from './
 import { maxReviewDate } from './graphql'
 import { SCRAPE_CONFIG } from './selectors'
 import { sleep, withRetry } from './retry'
-import { getPropertyWatermark, updatePropertyWatermark } from './watermark'
+import {
+    countReviewsForProperty,
+    getPropertyWatermark,
+    resetBackfillSkip,
+    updateBackfillSkip,
+    updatePropertyWatermark,
+} from './watermark'
 
 class GraphqlCaptureError extends Error {
     constructor(message: string) {
@@ -25,6 +31,9 @@ async function scrapeSingleProperty(propertyId: string) {
     }
 
     const watermark = await getPropertyWatermark(property)
+    const initialDbCount = await countReviewsForProperty(property.id)
+    const storedBackfillSkip = Number.parseInt(property.backfillSkip ?? '0', 10) || 0
+
     let attemptCount = 0
     let runId: string | undefined
 
@@ -41,51 +50,77 @@ async function scrapeSingleProperty(propertyId: string) {
                 try {
                     let reviewsFound = 0
                     let reviewsInserted = 0
-                    let consecutiveKnown = 0
                     let newestReviewDate: Date | null = null
-                    let graphqlCaptured = false
+                    let dbCount = initialDbCount
 
-                    const scrapeResult = await scrapePropertyReviews(browser, property, watermark, async (event) => {
-                        reviewsFound += event.reviews.length
+                    const scrapeResult = await scrapePropertyReviews(
+                        browser,
+                        property,
+                        {
+                            dbCount: initialDbCount,
+                            storedBackfillSkip,
+                            watermark,
+                        },
+                        async (event) => {
+                            reviewsFound += event.reviews.length
+                            let consecutiveKnown = 0
+                            let pageInserted = 0
+                            const backfillMode = event.dbCountBeforePage < event.reviewsCount
 
-                        for (const scraped of event.reviews) {
-                            const exists = await reviewExists(property, scraped)
-                            if (exists) {
-                                consecutiveKnown += 1
-                                if (consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
-                                    return { stop: true, consecutiveKnown }
+                            for (const scraped of event.reviews) {
+                                const exists = await reviewExists(property, scraped)
+                                if (exists) {
+                                    if (!backfillMode) {
+                                        consecutiveKnown += 1
+                                        if (consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
+                                            return {
+                                                stop: true,
+                                                consecutiveKnown,
+                                                pageInserted,
+                                                dbCountAfterPage: dbCount,
+                                            }
+                                        }
+                                    }
+                                    continue
                                 }
-                                continue
+
+                                consecutiveKnown = 0
+                                const inserted = await insertReview(property, scraped)
+                                if (inserted) {
+                                    reviewsInserted += 1
+                                    pageInserted += 1
+                                    dbCount += 1
+                                }
                             }
 
-                            consecutiveKnown = 0
-                            const inserted = await insertReview(property, scraped)
-                            if (inserted) {
-                                reviewsInserted += 1
+                            await updateBackfillSkip(property.id, event.skip + event.pageSize)
+
+                            const pageNewest = maxReviewDate(event.reviews.map((review) => review.reviewDate))
+                            if (
+                                pageNewest &&
+                                (!newestReviewDate || pageNewest.getTime() > newestReviewDate.getTime())
+                            ) {
+                                newestReviewDate = pageNewest
                             }
-                        }
 
-                        const pageNewest = maxReviewDate(event.reviews.map((review) => review.reviewDate))
-                        if (pageNewest && (!newestReviewDate || pageNewest.getTime() > newestReviewDate.getTime())) {
-                            newestReviewDate = pageNewest
-                        }
+                            if (
+                                !backfillMode &&
+                                watermark &&
+                                event.reviews.some((review) => review.reviewDate.getTime() <= watermark.getTime())
+                            ) {
+                                return { stop: true, consecutiveKnown, pageInserted, dbCountAfterPage: dbCount }
+                            }
 
-                        if (
-                            watermark &&
-                            event.reviews.some((review) => review.reviewDate.getTime() <= watermark.getTime())
-                        ) {
-                            return { stop: true, consecutiveKnown }
-                        }
+                            if (!backfillMode && consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
+                                return { stop: true, consecutiveKnown, pageInserted, dbCountAfterPage: dbCount }
+                            }
 
-                        if (consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
-                            return { stop: true, consecutiveKnown }
-                        }
+                            return { stop: false, consecutiveKnown, pageInserted, dbCountAfterPage: dbCount }
+                        },
+                    )
 
-                        return { stop: false, consecutiveKnown }
-                    })
-
-                    graphqlCaptured = scrapeResult.graphqlCaptured
                     reviewsFound = scrapeResult.reviewsFound
+                    reviewsInserted = scrapeResult.reviewsInserted
                     if (scrapeResult.newestReviewDate) {
                         newestReviewDate = scrapeResult.newestReviewDate
                     }
@@ -104,8 +139,30 @@ async function scrapeSingleProperty(propertyId: string) {
                         return { property: property.name, status: 'blocked' as const, reviewsInserted }
                     }
 
-                    if (!graphqlCaptured) {
+                    if (scrapeResult.rateLimited) {
+                        if (runId) {
+                            await finishScrapeRun(runId, {
+                                status: 'partial',
+                                reviewsFound,
+                                reviewsInserted,
+                                reviewsUpdated: 0,
+                                attemptCount,
+                                errorMessage: 'GraphQL rate limited — backfill_skip preserved for resume',
+                                newestReviewAt: newestReviewDate,
+                            })
+                        }
+                        console.log(`  Rate limited — resume later from skip=${scrapeResult.lastSkip}`)
+                        return { property: property.name, status: 'partial' as const, reviewsInserted }
+                    }
+
+                    if (!scrapeResult.graphqlCaptured) {
                         throw new GraphqlCaptureError('No reviewListFrontend payload captured from Booking.com GraphQL')
+                    }
+
+                    const finalDbCount = await countReviewsForProperty(property.id)
+                    const caughtUp = finalDbCount >= scrapeResult.reviewsCount
+                    if (caughtUp) {
+                        await resetBackfillSkip(property.id)
                     }
 
                     if (runId) {
@@ -122,7 +179,7 @@ async function scrapeSingleProperty(propertyId: string) {
                     await updatePropertyWatermark(property.id, newestReviewDate ?? watermark)
 
                     console.log(
-                        `  Parsed ${reviewsFound}/${scrapeResult.reviewsCount} reviews across ${scrapeResult.pagesFetched} page(s); ${reviewsInserted} inserted`,
+                        `  Done: ${reviewsFound} parsed, ${reviewsInserted} inserted this run, ${finalDbCount}/${scrapeResult.reviewsCount} in DB across ${scrapeResult.pagesFetched} page(s)`,
                     )
 
                     return { property: property.name, status: 'success' as const, reviewsInserted }

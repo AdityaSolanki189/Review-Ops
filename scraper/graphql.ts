@@ -1,6 +1,8 @@
 import type { Page, Request, Response } from 'playwright'
 import type { ScrapedReview } from '@/lib/validations/review'
 import { parseGraphqlReviewCards } from './parser'
+import { SCRAPE_CONFIG } from './selectors'
+import { sleep } from './retry'
 
 export interface GraphqlReviewCard {
     reviewUrl?: string
@@ -36,9 +38,28 @@ export interface CapturedGraphqlRequest {
     postData: string | null
 }
 
+export class GraphqlRateLimitError extends Error {
+    readonly status: number
+
+    constructor(status: number) {
+        super(`GraphQL rate limited with status ${status}`)
+        this.name = 'GraphqlRateLimitError'
+        this.status = status
+    }
+}
+
+export function isGraphqlRateLimitError(error: unknown): error is GraphqlRateLimitError {
+    return error instanceof GraphqlRateLimitError
+}
+
 export interface PaginationStopReason {
     stop: boolean
-    reason?: 'watermark' | 'consecutive_known' | 'end_of_list' | 'empty_page'
+    reason?: 'watermark' | 'consecutive_known' | 'end_of_list' | 'empty_page' | 'safety_cap'
+}
+
+export function estimateTotalPages(reviewsCount: number, pageSize: number): number {
+    if (pageSize <= 0) return 0
+    return Math.ceil(reviewsCount / pageSize)
 }
 
 export function isReviewListPayload(data: unknown): data is { data: { reviewListFrontend: ReviewListPayload } } {
@@ -125,7 +146,12 @@ function collectObjects(value: unknown, acc: Record<string, unknown>[] = []): Re
     return acc
 }
 
-export function setPaginationInBody(postData: string, skip: number, sorter = 'NEWEST_FIRST'): string {
+export function setPaginationInBody(
+    postData: string,
+    skip: number,
+    sorter = 'NEWEST_FIRST',
+    targetLimit = SCRAPE_CONFIG.targetPageLimit,
+): string {
     const parsed = JSON.parse(postData) as unknown
     const objects = collectObjects(parsed)
 
@@ -135,6 +161,12 @@ export function setPaginationInBody(postData: string, skip: number, sorter = 'NE
         }
         if ('offset' in obj && typeof obj.offset === 'number') {
             obj.offset = skip
+        }
+        if ('limit' in obj && typeof obj.limit === 'number') {
+            obj.limit = targetLimit
+        }
+        if ('rows' in obj && typeof obj.rows === 'number') {
+            obj.rows = targetLimit
         }
         if ('sorter' in obj) {
             obj.sorter = sorter
@@ -179,21 +211,30 @@ export function shouldStopAfterPage(input: {
     skip: number
     reviewsCount: number
     pageSize: number
+    backfillMode: boolean
+    pageNumber: number
+    maxPagesSafety: number
 }): PaginationStopReason {
     if (input.reviews.length === 0) {
         return { stop: true, reason: 'empty_page' }
     }
 
-    if (input.watermark) {
-        const watermarkTime = input.watermark.getTime()
-        const hitWatermark = input.reviews.some((review) => review.reviewDate.getTime() <= watermarkTime)
-        if (hitWatermark) {
-            return { stop: true, reason: 'watermark' }
-        }
+    if (input.pageNumber >= input.maxPagesSafety) {
+        return { stop: true, reason: 'safety_cap' }
     }
 
-    if (input.consecutiveKnown >= input.consecutiveKnownStop) {
-        return { stop: true, reason: 'consecutive_known' }
+    if (!input.backfillMode) {
+        if (input.watermark) {
+            const watermarkTime = input.watermark.getTime()
+            const hitWatermark = input.reviews.some((review) => review.reviewDate.getTime() <= watermarkTime)
+            if (hitWatermark) {
+                return { stop: true, reason: 'watermark' }
+            }
+        }
+
+        if (input.consecutiveKnown >= input.consecutiveKnownStop) {
+            return { stop: true, reason: 'consecutive_known' }
+        }
     }
 
     const nextSkip = input.skip + input.pageSize
@@ -304,25 +345,60 @@ export async function replayGraphqlRequest(
     }
 
     const postData = setPaginationInBody(captured.postData, skip)
-    const response = await page.request.fetch(captured.url, {
-        method: captured.method,
-        headers: captured.headers,
-        data: postData,
-    })
+    const retryDelays = [...SCRAPE_CONFIG.graphqlRetryDelaysMs]
+    let lastError: unknown
 
-    if (!response.ok()) {
-        throw new Error(`GraphQL replay failed with status ${response.status()}`)
+    for (let attempt = 0; attempt <= retryDelays.length; attempt++) {
+        try {
+            const response = await page.request.fetch(captured.url, {
+                method: captured.method,
+                headers: captured.headers,
+                data: postData,
+            })
+
+            const status = response.status()
+            if (status === 429 || status === 403) {
+                const delay = retryDelays[attempt]
+                if (delay !== undefined) {
+                    console.log(
+                        `  GraphQL ${status} — backing off ${Math.round(delay / 1000)}s (attempt ${attempt + 1})`,
+                    )
+                    await sleep(delay)
+                    continue
+                }
+                throw new GraphqlRateLimitError(status)
+            }
+
+            if (!response.ok()) {
+                throw new Error(`GraphQL replay failed with status ${status}`)
+            }
+
+            const payload = parseGraphqlResponseBody(await response.text())
+            if (!payload) {
+                throw new Error('GraphQL replay did not return reviewListFrontend payload')
+            }
+
+            return {
+                payload,
+                reviews: parseGraphqlReviewCards(payload.reviewCard),
+            }
+        } catch (error) {
+            lastError = error
+            if (isGraphqlRateLimitError(error)) {
+                throw error
+            }
+
+            const delay = retryDelays[attempt]
+            if (delay !== undefined) {
+                console.log(
+                    `  GraphQL replay error — backing off ${Math.round(delay / 1000)}s (attempt ${attempt + 1})`,
+                )
+                await sleep(delay)
+            }
+        }
     }
 
-    const payload = parseGraphqlResponseBody(await response.text())
-    if (!payload) {
-        throw new Error('GraphQL replay did not return reviewListFrontend payload')
-    }
-
-    return {
-        payload,
-        reviews: parseGraphqlReviewCards(payload.reviewCard),
-    }
+    throw lastError instanceof Error ? lastError : new Error('GraphQL replay failed after retries')
 }
 
 export class GraphqlRequestCollector {

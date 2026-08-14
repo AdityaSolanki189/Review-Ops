@@ -17,9 +17,16 @@ export const selectors = {
 } as const
 
 export const SCRAPE_CONFIG = {
-    maxPages: 50,
+    /** Safety cap only — pagination stops at reviewsCount first. */
+    maxPagesSafety: 2000,
     consecutiveKnownStop: 8,
-    pageDelayMs: 1500,
-    propertyDelayMs: 3000,
+    targetPageLimit: 25,
+    pageDelayMinMs: 2500,
+    pageDelayMaxMs: 5000,
+    pageBatchPauseEvery: 40,
+    pageBatchPauseMinMs: 20_000,
+    pageBatchPauseMaxMs: 30_000,
+    propertyDelayMs: 20_000,
+    graphqlRetryDelaysMs: [30_000, 60_000, 120_000] as const,
     retryDelaysMs: [1000, 3000, 10000],
 } as const

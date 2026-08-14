@@ -3,15 +3,18 @@ import type { Property } from '@/db/schema'
 import { isBlocked } from './blocked'
 import {
     captureReviewListFromTemplate,
+    estimateTotalPages,
     GraphqlRequestCollector,
     inferPageLimit,
+    isGraphqlRateLimitError,
     maxReviewDate,
     replayGraphqlRequest,
     shouldStopAfterPage,
     waitForReviewListCapture,
     type CapturedGraphqlRequest,
 } from './graphql'
-import { sleep } from './retry'
+import { computeResumeSkip } from './watermark'
+import { sleep, sleepBatchPause, sleepPageDelay } from './retry'
 import { SCRAPE_CONFIG, selectors } from './selectors'
 import type { ScrapedReview } from '@/lib/validations/review'
 
@@ -48,7 +51,7 @@ async function scrollToReviews(page: Page): Promise<void> {
     } catch {
         // Navigation can destroy the execution context mid-scroll; safe to continue.
     }
-    await sleep(1200)
+    await sleepPageDelay()
 }
 
 async function openReviewsSection(page: Page): Promise<void> {
@@ -64,7 +67,7 @@ async function openReviewsSection(page: Page): Promise<void> {
     for (const trigger of triggers) {
         if (await trigger.isVisible({ timeout: 1500 }).catch(() => false)) {
             await trigger.click().catch(() => undefined)
-            await sleep(1200)
+            await sleepPageDelay()
         }
     }
 }
@@ -78,13 +81,13 @@ async function stimulateReviewGraphql(page: Page, bookingUrl: string): Promise<v
         await page.goto(hashUrl, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => undefined)
         await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => undefined)
         await dismissCookieBanner(page)
-        await sleep(1500)
+        await sleepPageDelay()
     }
 
     await scrollToReviews(page)
     await openReviewsSection(page)
     await page.keyboard.press('End').catch(() => undefined)
-    await sleep(1500)
+    await sleepPageDelay()
 }
 
 async function resolveInitialCapture(
@@ -126,28 +129,44 @@ export interface ScrapePageEvent {
     pageNumber: number
     reviews: ScrapedReview[]
     reviewsCount: number
+    skip: number
+    pageSize: number
+    totalPages: number
+    dbCountBeforePage: number
 }
 
 export interface ScrapePageHandlerResult {
     stop: boolean
     consecutiveKnown: number
+    pageInserted: number
+    dbCountAfterPage: number
 }
 
 export type ScrapePageHandler = (event: ScrapePageEvent) => Promise<ScrapePageHandlerResult>
 
+export interface ScrapeOptions {
+    dbCount: number
+    storedBackfillSkip: number
+    watermark: Date | null
+}
+
 export interface ScrapeGraphqlResult {
     blocked: boolean
+    rateLimited: boolean
     graphqlCaptured: boolean
+    backfillMode: boolean
     reviewsCount: number
     reviewsFound: number
+    reviewsInserted: number
     newestReviewDate: Date | null
     pagesFetched: number
+    lastSkip: number
 }
 
 export async function scrapePropertyReviews(
     browser: Browser,
     property: Property,
-    watermark: Date | null,
+    options: ScrapeOptions,
     onPage: ScrapePageHandler,
 ): Promise<ScrapeGraphqlResult> {
     const context = await browser.newContext({
@@ -160,72 +179,131 @@ export async function scrapePropertyReviews(
     const collector = new GraphqlRequestCollector(page)
 
     let reviewsFound = 0
+    let reviewsInserted = 0
     let newestReviewDate: Date | null = null
     let pagesFetched = 0
+    let lastSkip = 0
+    let dbCount = options.dbCount
+    let reviewsCount = 0
+    let backfillMode = false
 
     try {
-        let captured = await resolveInitialCapture(page, collector, property.bookingUrl)
+        const initialCapture = await resolveInitialCapture(page, collector, property.bookingUrl)
 
         if (await isBlocked(page)) {
             return {
                 blocked: true,
+                rateLimited: false,
                 graphqlCaptured: false,
+                backfillMode: false,
                 reviewsCount: 0,
                 reviewsFound: 0,
+                reviewsInserted: 0,
                 newestReviewDate: null,
                 pagesFetched: 0,
+                lastSkip: options.storedBackfillSkip,
             }
         }
 
-        const capturedRequest: CapturedGraphqlRequest = captured.request
-        let reviewsCount = captured.payload.reviewsCount
-        let skip = 0
-        let pageSize = inferPageLimit(capturedRequest.postData, captured.reviews.length)
+        const capturedRequest: CapturedGraphqlRequest = initialCapture.request
+        reviewsCount = initialCapture.payload.reviewsCount
+        const pageSize = inferPageLimit(capturedRequest.postData, initialCapture.reviews.length)
+        backfillMode = dbCount < reviewsCount
+        let skip = computeResumeSkip(options.storedBackfillSkip, dbCount, pageSize, backfillMode)
         let consecutiveKnown = 0
         let pageNumber = 1
 
-        console.log(`  GraphQL captured for ${property.name}: ${reviewsCount} total reviews (page size ${pageSize})`)
-        if (watermark) {
-            console.log(`  Watermark: ${watermark.toISOString()}`)
+        let captured: {
+            payload: typeof initialCapture.payload
+            request: CapturedGraphqlRequest
+            reviews: ScrapedReview[]
         }
 
-        while (pageNumber <= SCRAPE_CONFIG.maxPages) {
+        if (backfillMode && skip > 0) {
+            console.log(`  Backfill mode: resuming at skip=${skip} (${dbCount}/${reviewsCount} in DB)`)
+            const replayed = await replayGraphqlRequest(page, capturedRequest, skip)
+            captured = {
+                payload: replayed.payload,
+                request: capturedRequest,
+                reviews: replayed.reviews,
+            }
+            reviewsCount = replayed.payload.reviewsCount
+        } else {
+            captured = initialCapture
+            if (backfillMode) {
+                console.log(`  Backfill mode: starting from skip=0 (${dbCount}/${reviewsCount} in DB)`)
+            } else {
+                console.log(`  Incremental mode: ${dbCount}/${reviewsCount} in DB`)
+            }
+        }
+
+        const totalPages = estimateTotalPages(reviewsCount, pageSize)
+        console.log(`  GraphQL total ${reviewsCount} reviews · page size ${pageSize} · ~${totalPages} pages`)
+        if (!backfillMode && options.watermark) {
+            console.log(`  Watermark: ${options.watermark.toISOString()}`)
+        }
+
+        while (true) {
             const reviews = captured.reviews
             reviewsFound += reviews.length
             pagesFetched += 1
+            lastSkip = skip
 
             const pageNewest = maxReviewDate(reviews.map((review) => review.reviewDate))
             if (pageNewest && (!newestReviewDate || pageNewest.getTime() > newestReviewDate.getTime())) {
                 newestReviewDate = pageNewest
             }
 
+            const dbCountBeforePage = dbCount
             const handlerResult = await onPage({
                 pageNumber,
                 reviews,
                 reviewsCount,
+                skip,
+                pageSize,
+                totalPages,
+                dbCountBeforePage,
             })
             consecutiveKnown = handlerResult.consecutiveKnown
+            reviewsInserted += handlerResult.pageInserted
+            dbCount = handlerResult.dbCountAfterPage
+
+            console.log(
+                `  page ${pageNumber}/${totalPages} skip=${skip} inserted=${handlerResult.pageInserted} (${dbCount}/${reviewsCount})`,
+            )
 
             const stopDecision = shouldStopAfterPage({
                 reviews,
-                watermark,
+                watermark: options.watermark,
                 consecutiveKnown,
                 consecutiveKnownStop: SCRAPE_CONFIG.consecutiveKnownStop,
                 skip,
                 reviewsCount,
                 pageSize,
+                backfillMode,
+                pageNumber,
+                maxPagesSafety: SCRAPE_CONFIG.maxPagesSafety,
             })
 
             if (handlerResult.stop || stopDecision.stop) {
                 if (stopDecision.reason === 'watermark') {
-                    console.log(`  Caught up at watermark (${watermark?.toISOString()})`)
+                    console.log(`  Caught up at watermark (${options.watermark?.toISOString()})`)
+                } else if (stopDecision.reason === 'end_of_list') {
+                    console.log(`  Reached end of review list (${reviewsCount} total)`)
+                } else if (stopDecision.reason === 'safety_cap') {
+                    console.log(`  Stopped at safety page cap (${SCRAPE_CONFIG.maxPagesSafety})`)
                 }
                 break
             }
 
+            if (pageNumber % SCRAPE_CONFIG.pageBatchPauseEvery === 0) {
+                console.log(`  Batch pause after ${pageNumber} pages`)
+                await sleepBatchPause()
+            }
+
             skip += pageSize
             pageNumber += 1
-            await sleep(SCRAPE_CONFIG.pageDelayMs)
+            await sleepPageDelay()
 
             const replayed = await replayGraphqlRequest(page, capturedRequest, skip)
             captured = {
@@ -234,26 +312,48 @@ export async function scrapePropertyReviews(
                 reviews: replayed.reviews,
             }
             reviewsCount = replayed.payload.reviewsCount
-            pageSize = inferPageLimit(capturedRequest.postData, replayed.reviews.length)
         }
 
         return {
             blocked: false,
+            rateLimited: false,
             graphqlCaptured: true,
+            backfillMode,
             reviewsCount,
             reviewsFound,
+            reviewsInserted,
             newestReviewDate,
             pagesFetched,
+            lastSkip: skip + pageSize,
         }
     } catch (error) {
         if (error instanceof Error && error.message === 'BLOCKED') {
             return {
                 blocked: true,
+                rateLimited: false,
                 graphqlCaptured: false,
+                backfillMode: false,
                 reviewsCount: 0,
-                reviewsFound: 0,
-                newestReviewDate: null,
-                pagesFetched: 0,
+                reviewsFound,
+                reviewsInserted,
+                newestReviewDate,
+                pagesFetched,
+                lastSkip,
+            }
+        }
+
+        if (isGraphqlRateLimitError(error)) {
+            return {
+                blocked: false,
+                rateLimited: true,
+                graphqlCaptured: pagesFetched > 0,
+                backfillMode,
+                reviewsCount,
+                reviewsFound,
+                reviewsInserted,
+                newestReviewDate,
+                pagesFetched,
+                lastSkip,
             }
         }
 

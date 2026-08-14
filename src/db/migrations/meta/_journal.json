@@ -15,6 +15,13 @@
       "when": 1786680000000,
       "tag": "0001_latest_review_watermark",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786683600000,
+      "tag": "0002_backfill_skip",
+      "breakpoints": true
     }
   ]
 }

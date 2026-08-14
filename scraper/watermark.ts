@@ -1,4 +1,4 @@
-import { desc, eq, max } from 'drizzle-orm'
+import { count, desc, eq, max } from 'drizzle-orm'
 import { db } from '@/db'
 import { properties, reviews, type Property } from '@/db/schema'
 
@@ -27,6 +27,43 @@ export async function updatePropertyWatermark(propertyId: string, newestReviewAt
     }
 
     await db.update(properties).set({ latestReviewAt: newestReviewAt }).where(eq(properties.id, propertyId))
+}
+
+export async function countReviewsForProperty(propertyId: string): Promise<number> {
+    const [row] = await db.select({ total: count() }).from(reviews).where(eq(reviews.propertyId, propertyId))
+    return Number(row?.total ?? 0)
+}
+
+export function computeResumeSkip(
+    storedSkip: number,
+    dbCount: number,
+    pageSize: number,
+    backfillMode: boolean,
+): number {
+    if (!backfillMode) {
+        return 0
+    }
+
+    if (storedSkip > 0) {
+        return storedSkip
+    }
+
+    if (dbCount <= 0) {
+        return 0
+    }
+
+    return Math.floor(dbCount / pageSize) * pageSize
+}
+
+export async function updateBackfillSkip(propertyId: string, skip: number): Promise<void> {
+    await db
+        .update(properties)
+        .set({ backfillSkip: String(skip) })
+        .where(eq(properties.id, propertyId))
+}
+
+export async function resetBackfillSkip(propertyId: string): Promise<void> {
+    await updateBackfillSkip(propertyId, 0)
 }
 
 export async function getLatestReviewDateForProperty(propertyId: string): Promise<Date | null> {
