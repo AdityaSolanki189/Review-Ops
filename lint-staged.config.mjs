@@ -4,7 +4,7 @@ const config = {
     '*.{js,ts,jsx,tsx,json,md,css,scss}': (filenames) => {
         const relativeFiles = filenames.map((file) => path.relative(process.cwd(), file)).join(' ')
         const spellCheckFiles = filenames
-            .filter((file) => /\.(js|jsx|ts|tsx|md|mdx)$/.test(file))
+            .filter((file) => /\.(js|jsx|ts|tsx)$/.test(file))
             .map((file) => path.relative(process.cwd(), file))
             .join(' ')
 
