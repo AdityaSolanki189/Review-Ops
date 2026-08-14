@@ -1,4 +1,5 @@
-import { pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { jsonb, numeric, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { timestamps } from '@/db/columns.helpers'
 
 export const properties = pgTable('properties', {
@@ -26,6 +27,7 @@ export const reviews = pgTable('reviews', {
     externalId: text('external_id'),
     fingerprint: text('fingerprint').notNull().unique(),
     rating: text('rating').notNull(),
+    ratingNumeric: numeric('rating_numeric', { precision: 4, scale: 1 }).generatedAlwaysAs(sql`(rating::numeric)`),
     title: text('title'),
     positiveText: text('positive_text'),
     negativeText: text('negative_text'),
@@ -94,3 +96,21 @@ export const scrapeRuns = pgTable('scrape_runs', {
 
 export type ScrapeRun = typeof scrapeRuns.$inferSelect
 export type NewScrapeRun = typeof scrapeRuns.$inferInsert
+
+export const reviewInsights = pgTable('review_insights', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    reviewId: uuid('review_id')
+        .notNull()
+        .unique()
+        .references(() => reviews.id, { onDelete: 'cascade' }),
+    summary: text('summary').notNull(),
+    strengths: jsonb('strengths').notNull().$type<string[]>(),
+    issues: jsonb('issues').notNull().$type<string[]>(),
+    suggestedAction: text('suggested_action').notNull(),
+    model: text('model').notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+    ...timestamps,
+})
+
+export type ReviewInsight = typeof reviewInsights.$inferSelect
+export type NewReviewInsight = typeof reviewInsights.$inferInsert

@@ -2,6 +2,7 @@
 
 import { useId } from 'react'
 import type { Property } from '@/db/schema'
+import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { formatTopicLabel, TOPIC_KEYWORDS, type ReviewTopicKey } from '@/lib/classification/topics'
 
@@ -13,19 +14,28 @@ interface ReviewFiltersFormProps {
         maxRating?: string
         topic?: string
         sentiment?: string
+        from?: string
+        to?: string
     }
+    onSubmit?: () => void
 }
 
-export function ReviewFiltersForm({ properties, params }: ReviewFiltersFormProps) {
+export function ReviewFiltersForm({ properties, params, onSubmit }: ReviewFiltersFormProps) {
     const propertyId = useId()
     const minRatingId = useId()
     const maxRatingId = useId()
     const topicId = useId()
     const sentimentId = useId()
+    const fromId = useId()
+    const toId = useId()
     const topicOptions = Object.keys(TOPIC_KEYWORDS) as ReviewTopicKey[]
 
     return (
-        <form method="get" className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-5">
+        <form
+            method="get"
+            className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-3 xl:grid-cols-4"
+            onSubmit={onSubmit}
+        >
             <div className="space-y-2">
                 <label htmlFor={propertyId} className="text-sm font-medium">
                     Property
@@ -89,10 +99,22 @@ export function ReviewFiltersForm({ properties, params }: ReviewFiltersFormProps
                     <option value="neutral">Neutral</option>
                 </Select>
             </div>
-            <div className="md:col-span-5">
+            <div className="space-y-2">
+                <label htmlFor={fromId} className="text-sm font-medium">
+                    From date
+                </label>
+                <Input id={fromId} name="from" type="date" defaultValue={params.from ?? ''} />
+            </div>
+            <div className="space-y-2">
+                <label htmlFor={toId} className="text-sm font-medium">
+                    To date
+                </label>
+                <Input id={toId} name="to" type="date" defaultValue={params.to ?? ''} />
+            </div>
+            <div className="flex items-end md:col-span-3 xl:col-span-4">
                 <button
                     type="submit"
-                    className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground"
+                    className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-transform duration-150 ease-out active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
                 >
                     Apply filters
                 </button>

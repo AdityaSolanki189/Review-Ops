@@ -91,7 +91,7 @@ function findReviewListPayloadDeep(value: unknown, depth = 0): ReviewListPayload
 
     const obj = value as Record<string, unknown>
     if (Array.isArray(obj.reviewCard) && typeof obj.reviewsCount === 'number') {
-        return obj as ReviewListPayload
+        return obj as unknown as ReviewListPayload
     }
 
     for (const nested of Object.values(obj)) {

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, lt, lte, or, sql } from 'drizzle-orm'
 import { cache } from 'react'
 import { db } from '@/db'
 import { properties, reviews, reviewTopics, scrapeRuns } from '@/db/schema'
@@ -14,6 +14,9 @@ const CACHE_TTL = {
     reviews: 120,
     topicMix: 300,
     sync: 60,
+    weeklySeries: 300,
+    ratingDistribution: 300,
+    weeklyBriefing: 3600,
 } as const
 
 function startOfWeek(date: Date): Date {
@@ -39,8 +42,24 @@ function hashReviewFilters(filters: ReviewFilters): string {
         from: filters.from?.toISOString() ?? '',
         to: filters.to?.toISOString() ?? '',
         limit: filters.limit ?? 20,
+        cursor: filters.cursor ?? '',
     })
 }
+
+function encodeCursor(reviewDate: Date, id: string): string {
+    return `${reviewDate.toISOString()}|${id}`
+}
+
+function decodeCursor(cursor: string): { reviewDate: Date; id: string } | null {
+    const separatorIndex = cursor.indexOf('|')
+    if (separatorIndex === -1) return null
+    const reviewDate = new Date(cursor.slice(0, separatorIndex))
+    const id = cursor.slice(separatorIndex + 1)
+    if (Number.isNaN(reviewDate.getTime()) || !id) return null
+    return { reviewDate, id }
+}
+
+export type EnrichedReview = Awaited<ReturnType<typeof loadRecentReviews>>['items'][number]
 
 async function loadAllProperties() {
     return db.select().from(properties).orderBy(asc(properties.name))
@@ -66,7 +85,7 @@ async function loadWeeklyStats(referenceDate: Date) {
 
     const [thisWeek] = await db
         .select({
-            avgRating: sql<number>`coalesce(avg(${reviews.rating}::numeric), 0)`,
+            avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
             reviewCount: count(),
         })
         .from(reviews)
@@ -74,7 +93,7 @@ async function loadWeeklyStats(referenceDate: Date) {
 
     const [lastWeek] = await db
         .select({
-            avgRating: sql<number>`coalesce(avg(${reviews.rating}::numeric), 0)`,
+            avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
             reviewCount: count(),
         })
         .from(reviews)
@@ -109,7 +128,7 @@ async function loadPropertyPerformance(referenceDate: Date) {
         db
             .select({
                 propertyId: reviews.propertyId,
-                avgRating: sql<number>`coalesce(avg(${reviews.rating}::numeric), 0)`,
+                avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
                 reviewCount: count(),
             })
             .from(reviews)
@@ -118,7 +137,7 @@ async function loadPropertyPerformance(referenceDate: Date) {
         db
             .select({
                 propertyId: reviews.propertyId,
-                avgRating: sql<number>`coalesce(avg(${reviews.rating}::numeric), 0)`,
+                avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
             })
             .from(reviews)
             .where(and(gte(reviews.reviewDate, lastWeekStart), lt(reviews.reviewDate, thisWeekStart)))
@@ -169,7 +188,7 @@ async function loadNegativeTopicTrends(referenceDate: Date) {
             and(
                 gte(reviews.reviewDate, thisWeekStart),
                 lt(reviews.reviewDate, nextWeekStart),
-                sql`${reviews.rating}::numeric <= 5`,
+                lte(reviews.ratingNumeric, '5'),
             ),
         )
 
@@ -212,25 +231,37 @@ export interface ReviewFilters {
     from?: Date
     to?: Date
     limit?: number
+    cursor?: string
 }
 
-async function loadRecentReviews(filters: ReviewFilters) {
-    const limit = filters.limit ?? 20
+export interface ReviewsPage {
+    items: Array<
+        typeof reviews.$inferSelect & {
+            property: typeof properties.$inferSelect
+            topics: Array<typeof reviewTopics.$inferSelect>
+        }
+    >
+    nextCursor: string | null
+}
+
+async function buildReviewConditions(filters: ReviewFilters) {
     const conditions = []
 
     if (filters.propertySlug) {
         const property = await loadPropertyBySlug(filters.propertySlug)
         if (property) {
             conditions.push(eq(reviews.propertyId, property.id))
+        } else {
+            conditions.push(sql`false`)
         }
     }
 
     if (filters.minRating !== undefined) {
-        conditions.push(sql`${reviews.rating}::numeric >= ${filters.minRating}`)
+        conditions.push(gte(reviews.ratingNumeric, String(filters.minRating)))
     }
 
     if (filters.maxRating !== undefined) {
-        conditions.push(sql`${reviews.rating}::numeric <= ${filters.maxRating}`)
+        conditions.push(lte(reviews.ratingNumeric, String(filters.maxRating)))
     }
 
     if (filters.from) {
@@ -241,17 +272,24 @@ async function loadRecentReviews(filters: ReviewFilters) {
         conditions.push(lte(reviews.reviewDate, filters.to))
     }
 
-    const rows = await db
-        .select({
-            review: reviews,
-            property: properties,
-        })
-        .from(reviews)
-        .innerJoin(properties, eq(reviews.propertyId, properties.id))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(desc(reviews.reviewDate))
-        .limit(limit)
+    if (filters.cursor) {
+        const decoded = decodeCursor(filters.cursor)
+        if (decoded) {
+            conditions.push(
+                or(
+                    lt(reviews.reviewDate, decoded.reviewDate),
+                    and(eq(reviews.reviewDate, decoded.reviewDate), lt(reviews.id, decoded.id)),
+                ),
+            )
+        }
+    }
 
+    return conditions
+}
+
+async function attachTopics(
+    rows: Array<{ review: typeof reviews.$inferSelect; property: typeof properties.$inferSelect }>,
+) {
     const reviewIds = rows.map((row) => row.review.id)
     const allTopics =
         reviewIds.length > 0
@@ -265,31 +303,136 @@ async function loadRecentReviews(filters: ReviewFilters) {
         topicsByReviewId.set(topic.reviewId, existing)
     }
 
-    const enriched = []
+    return rows.map((row) => ({
+        ...row.review,
+        property: row.property,
+        topics: topicsByReviewId.get(row.review.id) ?? [],
+    }))
+}
 
-    for (const row of rows) {
-        const topics = topicsByReviewId.get(row.review.id) ?? []
+async function loadRecentReviews(filters: ReviewFilters): Promise<ReviewsPage> {
+    const limit = filters.limit ?? 20
+    const conditions = await buildReviewConditions(filters)
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined
 
-        if (filters.topic && !topics.some((t) => t.topic === filters.topic)) {
-            continue
-        }
-
-        if (filters.sentiment && !topics.some((t) => t.sentiment === filters.sentiment)) {
-            continue
-        }
-
-        enriched.push({
-            ...row.review,
-            property: row.property,
-            topics,
-        })
+    const topicConditions = []
+    if (filters.topic) {
+        topicConditions.push(eq(reviewTopics.topic, filters.topic))
+    }
+    if (filters.sentiment) {
+        topicConditions.push(eq(reviewTopics.sentiment, filters.sentiment))
     }
 
-    return enriched
+    const rows =
+        topicConditions.length > 0
+            ? await db
+                  .selectDistinct({
+                      review: reviews,
+                      property: properties,
+                  })
+                  .from(reviews)
+                  .innerJoin(properties, eq(reviews.propertyId, properties.id))
+                  .innerJoin(reviewTopics, eq(reviewTopics.reviewId, reviews.id))
+                  .where(whereClause ? and(whereClause, ...topicConditions) : and(...topicConditions))
+                  .orderBy(desc(reviews.reviewDate), desc(reviews.id))
+                  .limit(limit + 1)
+            : await db
+                  .select({
+                      review: reviews,
+                      property: properties,
+                  })
+                  .from(reviews)
+                  .innerJoin(properties, eq(reviews.propertyId, properties.id))
+                  .where(whereClause)
+                  .orderBy(desc(reviews.reviewDate), desc(reviews.id))
+                  .limit(limit + 1)
+
+    const hasMore = rows.length > limit
+    const pageRows = hasMore ? rows.slice(0, limit) : rows
+    const items = await attachTopics(pageRows)
+    const last = items.at(-1)
+
+    return {
+        items,
+        nextCursor: hasMore && last ? encodeCursor(last.reviewDate, last.id) : null,
+    }
 }
 
 export async function getRecentReviews(filters: ReviewFilters = {}) {
     return cachedQuery(`reviews:${hashReviewFilters(filters)}`, CACHE_TTL.reviews, () => loadRecentReviews(filters))
+}
+
+export async function getReviewById(reviewId: string) {
+    const [row] = await db
+        .select({
+            review: reviews,
+            property: properties,
+        })
+        .from(reviews)
+        .innerJoin(properties, eq(reviews.propertyId, properties.id))
+        .where(eq(reviews.id, reviewId))
+        .limit(1)
+
+    if (!row) return null
+
+    const [item] = await attachTopics([row])
+    return item ?? null
+}
+
+async function loadWeeklyRatingSeries(referenceDate: Date, weeks = 8) {
+    const endWeekStart = startOfWeek(referenceDate)
+    const seriesStart = new Date(endWeekStart)
+    seriesStart.setDate(seriesStart.getDate() - (weeks - 1) * 7)
+
+    const rows = await db
+        .select({
+            weekStart: sql<string>`date_trunc('week', ${reviews.reviewDate})`,
+            avgRating: sql<number>`coalesce(avg(${reviews.ratingNumeric}), 0)`,
+            reviewCount: count(),
+        })
+        .from(reviews)
+        .where(gte(reviews.reviewDate, seriesStart))
+        .groupBy(sql`date_trunc('week', ${reviews.reviewDate})`)
+        .orderBy(asc(sql`date_trunc('week', ${reviews.reviewDate})`))
+
+    return rows.map((row) => ({
+        weekStart: new Date(row.weekStart),
+        avgRating: Number(row.avgRating),
+        reviewCount: Number(row.reviewCount),
+    }))
+}
+
+export async function getWeeklyRatingSeries(referenceDate = new Date()) {
+    return cachedQuery(`weekly-series:${weekKey(referenceDate)}`, CACHE_TTL.weeklySeries, () =>
+        loadWeeklyRatingSeries(referenceDate),
+    )
+}
+
+async function loadRatingDistribution(referenceDate: Date) {
+    const thisWeekStart = startOfWeek(referenceDate)
+    const nextWeekStart = new Date(thisWeekStart)
+    nextWeekStart.setDate(nextWeekStart.getDate() + 7)
+
+    const rows = await db
+        .select({
+            rating: reviews.ratingNumeric,
+            count: count(),
+        })
+        .from(reviews)
+        .where(and(gte(reviews.reviewDate, thisWeekStart), lt(reviews.reviewDate, nextWeekStart)))
+        .groupBy(reviews.ratingNumeric)
+        .orderBy(asc(reviews.ratingNumeric))
+
+    return rows.map((row) => ({
+        rating: Number(row.rating),
+        count: Number(row.count),
+    }))
+}
+
+export async function getRatingDistribution(referenceDate = new Date()) {
+    return cachedQuery(`rating-dist:${weekKey(referenceDate)}`, CACHE_TTL.ratingDistribution, () =>
+        loadRatingDistribution(referenceDate),
+    )
 }
 
 async function loadLatestScrapeRuns() {

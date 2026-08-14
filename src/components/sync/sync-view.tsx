@@ -17,10 +17,9 @@ export function SyncView() {
         <div className="space-y-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <h1 className="text-3xl font-semibold tracking-tight">Sync history</h1>
-                    <p className="mt-1 text-muted-foreground">
+                    <p className="text-muted-foreground">
                         Operational log of Playwright scrape runs. Trigger sync locally with{' '}
-                        <code className="rounded bg-muted px-1 py-0.5">pnpm scrape</code>.
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">pnpm scrape</code>.
                     </p>
                 </div>
                 <RefreshButton onClick={() => invalidateCache.mutate()} isPending={invalidateCache.isPending} />

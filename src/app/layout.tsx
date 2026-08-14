@@ -1,13 +1,12 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { GeistMono } from 'geist/font/mono'
+import { GeistSans } from 'geist/font/sans'
 import '@/app/globals.css'
 import Providers from '@/app/providers'
 import { AppShell } from '@/components/layout/app-shell'
 import TopLoader from '@/components/top-loader'
 import { config } from '@/lib/config/server'
 import { cn } from '@/lib/utils/utils'
-
-const inter = Inter({ subsets: ['latin'] })
 
 export const dynamic = 'force-dynamic'
 
@@ -21,11 +20,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="en" suppressHydrationWarning>
+        <html lang="en" suppressHydrationWarning className={cn(GeistSans.variable, GeistMono.variable)}>
             <head>
                 <TopLoader />
             </head>
-            <body className={cn(inter.className, 'min-h-screen antialiased')}>
+            <body className="min-h-screen font-sans antialiased">
                 <Providers>
                     <AppShell>{children}</AppShell>
                 </Providers>

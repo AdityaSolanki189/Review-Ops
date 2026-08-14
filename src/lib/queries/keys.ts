@@ -8,6 +8,9 @@ export const queryKeys = {
         topicTrends: ['dashboard', 'topic-trends'] as const,
         recentReviews: ['dashboard', 'recent-reviews'] as const,
         syncHealth: ['dashboard', 'sync-health'] as const,
+        weeklySeries: ['dashboard', 'weekly-series'] as const,
+        ratingDistribution: ['dashboard', 'rating-distribution'] as const,
+        weeklyBriefing: ['dashboard', 'weekly-briefing'] as const,
     },
     properties: {
         all: ['properties'] as const,

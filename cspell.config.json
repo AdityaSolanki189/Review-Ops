@@ -58,6 +58,8 @@
         "scraper",
         "checkin",
         "ensuite",
+        "nums",
+        "openrouter",
     ],
     "ignorePaths": [
         "node_modules/**",

@@ -13,8 +13,7 @@ export function PropertiesView() {
     return (
         <div className="space-y-8">
             <div>
-                <h1 className="text-3xl font-semibold tracking-tight">Properties</h1>
-                <p className="mt-1 text-muted-foreground">Performance across the four Azzurro Sydney properties</p>
+                <p className="text-muted-foreground">Performance across the four Azzurro Sydney properties</p>
             </div>
 
             <QueryState
