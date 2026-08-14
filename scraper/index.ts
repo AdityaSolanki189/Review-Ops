@@ -5,7 +5,7 @@ import { db, pool } from '@/db'
 import { properties } from '@/db/schema'
 import { seedProperties } from '@/lib/seed'
 import { scrapePropertyReviews } from './booking'
-import { createScrapeRun, finishScrapeRun, insertReview, reviewExists } from './deduplicate'
+import { createScrapeRun, finishScrapeRun, insertReview } from './deduplicate'
 import { maxReviewDate } from './graphql'
 import { SCRAPE_CONFIG } from './selectors'
 import { sleep, withRetry } from './retry'
@@ -50,6 +50,7 @@ async function scrapeSingleProperty(propertyId: string) {
                 try {
                     let reviewsFound = 0
                     let reviewsInserted = 0
+                    let reviewsUpdated = 0
                     let newestReviewDate: Date | null = null
                     let dbCount = initialDbCount
 
@@ -65,11 +66,12 @@ async function scrapeSingleProperty(propertyId: string) {
                             reviewsFound += event.reviews.length
                             let consecutiveKnown = 0
                             let pageInserted = 0
+                            let pageUpdated = 0
                             const backfillMode = event.dbCountBeforePage < event.reviewsCount
 
                             for (const scraped of event.reviews) {
-                                const exists = await reviewExists(property, scraped)
-                                if (exists) {
+                                const persisted = await insertReview(property, scraped)
+                                if (persisted.kind === 'duplicate') {
                                     if (!backfillMode) {
                                         consecutiveKnown += 1
                                         if (consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
@@ -77,6 +79,7 @@ async function scrapeSingleProperty(propertyId: string) {
                                                 stop: true,
                                                 consecutiveKnown,
                                                 pageInserted,
+                                                pageUpdated,
                                                 dbCountAfterPage: dbCount,
                                             }
                                         }
@@ -85,11 +88,13 @@ async function scrapeSingleProperty(propertyId: string) {
                                 }
 
                                 consecutiveKnown = 0
-                                const inserted = await insertReview(property, scraped)
-                                if (inserted) {
+                                if (persisted.kind === 'inserted') {
                                     reviewsInserted += 1
                                     pageInserted += 1
                                     dbCount += 1
+                                } else {
+                                    reviewsUpdated += 1
+                                    pageUpdated += 1
                                 }
                             }
 
@@ -108,19 +113,38 @@ async function scrapeSingleProperty(propertyId: string) {
                                 watermark &&
                                 event.reviews.some((review) => review.reviewDate.getTime() <= watermark.getTime())
                             ) {
-                                return { stop: true, consecutiveKnown, pageInserted, dbCountAfterPage: dbCount }
+                                return {
+                                    stop: true,
+                                    consecutiveKnown,
+                                    pageInserted,
+                                    pageUpdated,
+                                    dbCountAfterPage: dbCount,
+                                }
                             }
 
                             if (!backfillMode && consecutiveKnown >= SCRAPE_CONFIG.consecutiveKnownStop) {
-                                return { stop: true, consecutiveKnown, pageInserted, dbCountAfterPage: dbCount }
+                                return {
+                                    stop: true,
+                                    consecutiveKnown,
+                                    pageInserted,
+                                    pageUpdated,
+                                    dbCountAfterPage: dbCount,
+                                }
                             }
 
-                            return { stop: false, consecutiveKnown, pageInserted, dbCountAfterPage: dbCount }
+                            return {
+                                stop: false,
+                                consecutiveKnown,
+                                pageInserted,
+                                pageUpdated,
+                                dbCountAfterPage: dbCount,
+                            }
                         },
                     )
 
                     reviewsFound = scrapeResult.reviewsFound
                     reviewsInserted = scrapeResult.reviewsInserted
+                    reviewsUpdated = scrapeResult.reviewsUpdated
                     if (scrapeResult.newestReviewDate) {
                         newestReviewDate = scrapeResult.newestReviewDate
                     }
@@ -131,7 +155,7 @@ async function scrapeSingleProperty(propertyId: string) {
                                 status: 'blocked',
                                 reviewsFound,
                                 reviewsInserted,
-                                reviewsUpdated: 0,
+                                reviewsUpdated,
                                 attemptCount,
                                 errorMessage: 'Booking.com blocked or CAPTCHA detected',
                             })
@@ -145,7 +169,7 @@ async function scrapeSingleProperty(propertyId: string) {
                                 status: 'partial',
                                 reviewsFound,
                                 reviewsInserted,
-                                reviewsUpdated: 0,
+                                reviewsUpdated,
                                 attemptCount,
                                 errorMessage: 'GraphQL rate limited — backfill_skip preserved for resume',
                                 newestReviewAt: newestReviewDate,
@@ -170,7 +194,7 @@ async function scrapeSingleProperty(propertyId: string) {
                             status: 'success',
                             reviewsFound,
                             reviewsInserted,
-                            reviewsUpdated: 0,
+                            reviewsUpdated,
                             attemptCount,
                             newestReviewAt: newestReviewDate,
                         })
@@ -179,7 +203,7 @@ async function scrapeSingleProperty(propertyId: string) {
                     await updatePropertyWatermark(property.id, newestReviewDate ?? watermark)
 
                     console.log(
-                        `  Done: ${reviewsFound} parsed, ${reviewsInserted} inserted this run, ${finalDbCount}/${scrapeResult.reviewsCount} in DB across ${scrapeResult.pagesFetched} page(s)`,
+                        `  Done: ${reviewsFound} parsed, ${reviewsInserted} inserted and ${reviewsUpdated} updated this run, ${finalDbCount}/${scrapeResult.reviewsCount} in DB across ${scrapeResult.pagesFetched} page(s)`,
                     )
 
                     return { property: property.name, status: 'success' as const, reviewsInserted }
