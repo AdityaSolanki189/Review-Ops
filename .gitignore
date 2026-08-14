@@ -40,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# AI / local agent files (keep local, never push)
+.claude/
+CLAUDE.md
+AGENTS.md
+.mcp.json
+.cursor/
+.agents/
