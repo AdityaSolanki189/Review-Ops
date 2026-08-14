@@ -1,0 +1,27 @@
+import type { ReviewFilters } from '@/db/queries/analytics'
+
+export const queryKeys = {
+    dashboard: {
+        all: ['dashboard'] as const,
+        weeklyStats: ['dashboard', 'weekly-stats'] as const,
+        propertyPerformance: ['dashboard', 'property-performance'] as const,
+        topicTrends: ['dashboard', 'topic-trends'] as const,
+        recentReviews: ['dashboard', 'recent-reviews'] as const,
+        syncHealth: ['dashboard', 'sync-health'] as const,
+    },
+    properties: {
+        all: ['properties'] as const,
+        list: ['properties', 'list'] as const,
+        performance: ['properties', 'performance'] as const,
+        detail: (slug: string) => ['property', slug] as const,
+        topicMix: (slug: string) => ['property', slug, 'topic-mix'] as const,
+    },
+    reviews: {
+        all: ['reviews'] as const,
+        list: (filters: ReviewFilters) => ['reviews', filters] as const,
+    },
+    sync: {
+        all: ['sync'] as const,
+        history: (limit: number) => ['sync', 'history', limit] as const,
+    },
+} as const

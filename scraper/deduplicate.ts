@@ -1,6 +1,7 @@
 import { eq, or } from 'drizzle-orm'
 import { db } from '@/db'
 import { reviews, reviewTopics, scrapeRuns, type Property } from '@/db/schema'
+import { invalidateCache } from '@/lib/cache/cached'
 import { classifyReview } from '@/lib/classification/topics'
 import { buildExternalId, buildReviewFingerprint } from '@/lib/deduplicate'
 import type { ScrapedReview } from '@/lib/validations/review'
@@ -129,4 +130,6 @@ export async function finishScrapeRun(
             errorMessage: data.errorMessage ?? null,
         })
         .where(eq(scrapeRuns.id, runId))
+
+    await invalidateCache()
 }

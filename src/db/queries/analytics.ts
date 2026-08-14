@@ -1,7 +1,20 @@
 import { and, asc, count, desc, eq, gte, inArray, lt, lte, sql } from 'drizzle-orm'
+import { cache } from 'react'
 import { db } from '@/db'
 import { properties, reviews, reviewTopics, scrapeRuns } from '@/db/schema'
+import { cachedQuery } from '@/lib/cache/cached'
 import type { ReviewSentiment, ReviewTopicKey } from '@/lib/classification/topics'
+
+const CACHE_TTL = {
+    properties: 3600,
+    property: 3600,
+    weekly: 300,
+    performance: 300,
+    topicsNeg: 300,
+    reviews: 120,
+    topicMix: 300,
+    sync: 60,
+} as const
 
 function startOfWeek(date: Date): Date {
     const d = new Date(date)
@@ -12,16 +25,39 @@ function startOfWeek(date: Date): Date {
     return d
 }
 
-export async function getAllProperties() {
+function weekKey(date: Date): string {
+    return startOfWeek(date).toISOString().slice(0, 10)
+}
+
+function hashReviewFilters(filters: ReviewFilters): string {
+    return JSON.stringify({
+        propertySlug: filters.propertySlug ?? '',
+        minRating: filters.minRating ?? '',
+        maxRating: filters.maxRating ?? '',
+        topic: filters.topic ?? '',
+        sentiment: filters.sentiment ?? '',
+        from: filters.from?.toISOString() ?? '',
+        to: filters.to?.toISOString() ?? '',
+        limit: filters.limit ?? 20,
+    })
+}
+
+async function loadAllProperties() {
     return db.select().from(properties).orderBy(asc(properties.name))
 }
 
-export async function getPropertyBySlug(slug: string) {
+export const getAllProperties = cache(async () => cachedQuery('properties', CACHE_TTL.properties, loadAllProperties))
+
+async function loadPropertyBySlug(slug: string) {
     const [property] = await db.select().from(properties).where(eq(properties.slug, slug)).limit(1)
     return property ?? null
 }
 
-export async function getWeeklyStats(referenceDate = new Date()) {
+export async function getPropertyBySlug(slug: string) {
+    return cachedQuery(`property:${slug}`, CACHE_TTL.property, () => loadPropertyBySlug(slug))
+}
+
+async function loadWeeklyStats(referenceDate: Date) {
     const thisWeekStart = startOfWeek(referenceDate)
     const nextWeekStart = new Date(thisWeekStart)
     nextWeekStart.setDate(nextWeekStart.getDate() + 7)
@@ -56,57 +92,72 @@ export async function getWeeklyStats(referenceDate = new Date()) {
     }
 }
 
-export async function getPropertyPerformance(referenceDate = new Date()) {
+export async function getWeeklyStats(referenceDate = new Date()) {
+    return cachedQuery(`weekly:${weekKey(referenceDate)}`, CACHE_TTL.weekly, () => loadWeeklyStats(referenceDate))
+}
+
+async function loadPropertyPerformance(referenceDate: Date) {
     const thisWeekStart = startOfWeek(referenceDate)
     const nextWeekStart = new Date(thisWeekStart)
     nextWeekStart.setDate(nextWeekStart.getDate() + 7)
     const lastWeekStart = new Date(thisWeekStart)
     lastWeekStart.setDate(lastWeekStart.getDate() - 7)
 
-    const allProperties = await getAllProperties()
-    const results = []
+    const allProperties = await loadAllProperties()
 
-    for (const property of allProperties) {
-        const [thisWeek] = await db
-            .select({ avgRating: sql<number>`coalesce(avg(${reviews.rating}::numeric), 0)`, reviewCount: count() })
+    const [thisWeekStats, lastWeekStats, totalStats] = await Promise.all([
+        db
+            .select({
+                propertyId: reviews.propertyId,
+                avgRating: sql<number>`coalesce(avg(${reviews.rating}::numeric), 0)`,
+                reviewCount: count(),
+            })
             .from(reviews)
-            .where(
-                and(
-                    eq(reviews.propertyId, property.id),
-                    gte(reviews.reviewDate, thisWeekStart),
-                    lt(reviews.reviewDate, nextWeekStart),
-                ),
-            )
-
-        const [lastWeek] = await db
-            .select({ avgRating: sql<number>`coalesce(avg(${reviews.rating}::numeric), 0)` })
+            .where(and(gte(reviews.reviewDate, thisWeekStart), lt(reviews.reviewDate, nextWeekStart)))
+            .groupBy(reviews.propertyId),
+        db
+            .select({
+                propertyId: reviews.propertyId,
+                avgRating: sql<number>`coalesce(avg(${reviews.rating}::numeric), 0)`,
+            })
             .from(reviews)
-            .where(
-                and(
-                    eq(reviews.propertyId, property.id),
-                    gte(reviews.reviewDate, lastWeekStart),
-                    lt(reviews.reviewDate, thisWeekStart),
-                ),
-            )
-
-        const [totalReviews] = await db
-            .select({ count: count() })
+            .where(and(gte(reviews.reviewDate, lastWeekStart), lt(reviews.reviewDate, thisWeekStart)))
+            .groupBy(reviews.propertyId),
+        db
+            .select({
+                propertyId: reviews.propertyId,
+                count: count(),
+            })
             .from(reviews)
-            .where(eq(reviews.propertyId, property.id))
+            .groupBy(reviews.propertyId),
+    ])
 
-        results.push({
+    const thisWeekByProperty = new Map(thisWeekStats.map((row) => [row.propertyId, row]))
+    const lastWeekByProperty = new Map(lastWeekStats.map((row) => [row.propertyId, row]))
+    const totalByProperty = new Map(totalStats.map((row) => [row.propertyId, row]))
+
+    return allProperties.map((property) => {
+        const thisWeek = thisWeekByProperty.get(property.id)
+        const lastWeek = lastWeekByProperty.get(property.id)
+        const total = totalByProperty.get(property.id)
+
+        return {
             property,
             avgRating: Number(thisWeek?.avgRating ?? 0),
             reviewCount: Number(thisWeek?.reviewCount ?? 0),
             delta: Number(thisWeek?.avgRating ?? 0) - Number(lastWeek?.avgRating ?? 0),
-            totalReviews: Number(totalReviews?.count ?? 0),
-        })
-    }
-
-    return results
+            totalReviews: Number(total?.count ?? 0),
+        }
+    })
 }
 
-export async function getNegativeTopicTrends(referenceDate = new Date()) {
+export async function getPropertyPerformance(referenceDate = new Date()) {
+    return cachedQuery(`performance:${weekKey(referenceDate)}`, CACHE_TTL.performance, () =>
+        loadPropertyPerformance(referenceDate),
+    )
+}
+
+async function loadNegativeTopicTrends(referenceDate: Date) {
     const thisWeekStart = startOfWeek(referenceDate)
     const nextWeekStart = new Date(thisWeekStart)
     nextWeekStart.setDate(nextWeekStart.getDate() + 7)
@@ -146,6 +197,12 @@ export async function getNegativeTopicTrends(referenceDate = new Date()) {
     }))
 }
 
+export async function getNegativeTopicTrends(referenceDate = new Date()) {
+    return cachedQuery(`topics:neg:${weekKey(referenceDate)}`, CACHE_TTL.topicsNeg, () =>
+        loadNegativeTopicTrends(referenceDate),
+    )
+}
+
 export interface ReviewFilters {
     propertySlug?: string
     minRating?: number
@@ -157,12 +214,12 @@ export interface ReviewFilters {
     limit?: number
 }
 
-export async function getRecentReviews(filters: ReviewFilters = {}) {
+async function loadRecentReviews(filters: ReviewFilters) {
     const limit = filters.limit ?? 20
     const conditions = []
 
     if (filters.propertySlug) {
-        const property = await getPropertyBySlug(filters.propertySlug)
+        const property = await loadPropertyBySlug(filters.propertySlug)
         if (property) {
             conditions.push(eq(reviews.propertyId, property.id))
         }
@@ -195,10 +252,23 @@ export async function getRecentReviews(filters: ReviewFilters = {}) {
         .orderBy(desc(reviews.reviewDate))
         .limit(limit)
 
+    const reviewIds = rows.map((row) => row.review.id)
+    const allTopics =
+        reviewIds.length > 0
+            ? await db.select().from(reviewTopics).where(inArray(reviewTopics.reviewId, reviewIds))
+            : []
+
+    const topicsByReviewId = new Map<string, typeof allTopics>()
+    for (const topic of allTopics) {
+        const existing = topicsByReviewId.get(topic.reviewId) ?? []
+        existing.push(topic)
+        topicsByReviewId.set(topic.reviewId, existing)
+    }
+
     const enriched = []
 
     for (const row of rows) {
-        const topics = await db.select().from(reviewTopics).where(eq(reviewTopics.reviewId, row.review.id))
+        const topics = topicsByReviewId.get(row.review.id) ?? []
 
         if (filters.topic && !topics.some((t) => t.topic === filters.topic)) {
             continue
@@ -218,25 +288,35 @@ export async function getRecentReviews(filters: ReviewFilters = {}) {
     return enriched
 }
 
-export async function getLatestScrapeRuns() {
-    const allProperties = await getAllProperties()
-    const results = []
-
-    for (const property of allProperties) {
-        const [latest] = await db
-            .select()
-            .from(scrapeRuns)
-            .where(eq(scrapeRuns.propertyId, property.id))
-            .orderBy(desc(scrapeRuns.startedAt))
-            .limit(1)
-
-        results.push({ property, run: latest ?? null })
-    }
-
-    return results
+export async function getRecentReviews(filters: ReviewFilters = {}) {
+    return cachedQuery(`reviews:${hashReviewFilters(filters)}`, CACHE_TTL.reviews, () => loadRecentReviews(filters))
 }
 
-export async function getScrapeRunHistory(limit = 50) {
+async function loadLatestScrapeRuns() {
+    const allProperties = await loadAllProperties()
+
+    const latestRuns = await db
+        .select()
+        .from(scrapeRuns)
+        .where(
+            sql`(${scrapeRuns.propertyId}, ${scrapeRuns.startedAt}) IN (
+                SELECT property_id, MAX(started_at) FROM scrape_runs GROUP BY property_id
+            )`,
+        )
+
+    const runByPropertyId = new Map(latestRuns.map((run) => [run.propertyId, run]))
+
+    return allProperties.map((property) => ({
+        property,
+        run: runByPropertyId.get(property.id) ?? null,
+    }))
+}
+
+export async function getLatestScrapeRuns() {
+    return cachedQuery('sync:latest', CACHE_TTL.sync, loadLatestScrapeRuns)
+}
+
+async function loadScrapeRunHistory(limit: number) {
     return db
         .select({
             run: scrapeRuns,
@@ -246,6 +326,10 @@ export async function getScrapeRunHistory(limit = 50) {
         .innerJoin(properties, eq(scrapeRuns.propertyId, properties.id))
         .orderBy(desc(scrapeRuns.startedAt))
         .limit(limit)
+}
+
+export async function getScrapeRunHistory(limit = 50) {
+    return cachedQuery(`sync:history:${limit}`, CACHE_TTL.sync, () => loadScrapeRunHistory(limit))
 }
 
 export async function getSyncHealth() {
@@ -271,7 +355,7 @@ export async function getSyncHealth() {
     }
 }
 
-export async function getPropertyTopicMix(propertyId: string) {
+async function loadPropertyTopicMix(propertyId: string) {
     return db
         .select({
             topic: reviewTopics.topic,
@@ -283,4 +367,8 @@ export async function getPropertyTopicMix(propertyId: string) {
         .where(eq(reviews.propertyId, propertyId))
         .groupBy(reviewTopics.topic, reviewTopics.sentiment)
         .orderBy(desc(count()))
+}
+
+export async function getPropertyTopicMix(propertyId: string) {
+    return cachedQuery(`property:${propertyId}:mix`, CACHE_TTL.topicMix, () => loadPropertyTopicMix(propertyId))
 }

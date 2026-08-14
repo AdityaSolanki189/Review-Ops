@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { properties, type Property } from '@/db/schema'
+import { invalidateCache } from '@/lib/cache/cached'
 import { PROPERTY_SEEDS } from '@/lib/properties'
 
 export async function seedProperties(): Promise<Property[]> {
@@ -40,6 +41,8 @@ export async function seedProperties(): Promise<Property[]> {
             seeded.push(created)
         }
     }
+
+    await invalidateCache()
 
     return seeded
 }
