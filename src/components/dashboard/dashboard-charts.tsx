@@ -39,7 +39,7 @@ const sentimentConfig = {
     },
     neutral: {
         label: 'Neutral',
-        color: 'var(--muted-foreground)',
+        color: 'var(--muted)',
     },
     negative: {
         label: 'Negative',
@@ -67,7 +67,7 @@ export function SentimentPieChart({
         { key: 'positive', value: mix.positive, fill: 'var(--color-positive)' },
         { key: 'neutral', value: mix.neutral, fill: 'var(--color-neutral)' },
         { key: 'negative', value: mix.negative, fill: 'var(--color-negative)' },
-    ].filter((row) => row.value > 0)
+    ]
 
     const heightClass = compact ? 'h-24 w-24' : 'h-[180px] w-full'
 

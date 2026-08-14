@@ -635,25 +635,56 @@ export function DashboardView() {
                     </QueryState>
 
                     {overview ? (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Coverage</CardTitle>
-                                <CardDescription>Classification and topic sentiment for this period</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-6">
-                                <SignalBar
-                                    label="Classification coverage"
-                                    value={
-                                        overview.classificationCoverage.value === null
-                                            ? 'n/a'
-                                            : `${overview.classificationCoverage.value.toFixed(0)}%`
-                                    }
-                                    percentage={overview.classificationCoverage.value ?? 0}
-                                    tone="primary"
-                                />
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-1">
-                                        <p className="text-sm font-medium">Sentiment</p>
+                        <>
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Coverage</CardTitle>
+                                    <CardDescription>Data quality and score mix for this period</CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <SignalBar
+                                        label="Classification coverage"
+                                        value={
+                                            overview.classificationCoverage.value === null
+                                                ? 'n/a'
+                                                : `${overview.classificationCoverage.value.toFixed(0)}%`
+                                        }
+                                        percentage={overview.classificationCoverage.value ?? 0}
+                                        tone="primary"
+                                    />
+                                    <SignalBar
+                                        label="Low-score rate"
+                                        value={
+                                            overview.lowScoreRate.value === null
+                                                ? 'n/a'
+                                                : `${overview.lowScoreRate.value.toFixed(1)}%`
+                                        }
+                                        percentage={overview.lowScoreRate.value ?? 0}
+                                        tone="warning"
+                                    />
+                                    <SignalBar
+                                        label="Average rating"
+                                        value={
+                                            overview.averageRating.value === null
+                                                ? 'n/a'
+                                                : `${overview.averageRating.value.toFixed(1)} / 10`
+                                        }
+                                        percentage={
+                                            overview.averageRating.value !== null
+                                                ? (overview.averageRating.value / 10) * 100
+                                                : 0
+                                        }
+                                        tone="success"
+                                    />
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardHeader>
+                                    <div className="flex items-start gap-1">
+                                        <div className="min-w-0 flex-1">
+                                            <CardTitle>Sentiment</CardTitle>
+                                            <CardDescription>Classified topic mention mix</CardDescription>
+                                        </div>
                                         <Tooltip>
                                             <TooltipTrigger asChild>
                                                 <button
@@ -670,10 +701,12 @@ export function DashboardView() {
                                             </TooltipContent>
                                         </Tooltip>
                                     </div>
+                                </CardHeader>
+                                <CardContent>
                                     <SentimentPieChart mix={overview.sentimentMix} />
-                                </div>
-                            </CardContent>
-                        </Card>
+                                </CardContent>
+                            </Card>
+                        </>
                     ) : null}
 
                     <QueryState
