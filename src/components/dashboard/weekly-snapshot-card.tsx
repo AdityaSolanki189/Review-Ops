@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { MetricCard } from '@/components/dashboard/dashboard-parts'
+import { CardHeaderWithInfo } from '@/components/dashboard/info-tip'
 import { QueryState } from '@/components/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,12 +33,21 @@ function WeeklySnapshotContent({ snapshot }: { snapshot: WeeklySnapshot }) {
         <Card>
             <CardHeader className="gap-2">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                        <CardTitle>This week</CardTitle>
-                        <CardDescription>
-                            Calendar week in Sydney time ({formatWeekRange(snapshot.weekStart, snapshot.weekEnd)})
-                        </CardDescription>
-                    </div>
+                    <CardHeaderWithInfo
+                        title={<CardTitle>This week</CardTitle>}
+                        description={
+                            <CardDescription>
+                                Calendar week in Sydney time ({formatWeekRange(snapshot.weekStart, snapshot.weekEnd)})
+                            </CardDescription>
+                        }
+                        infoLabel="About this week"
+                        info={
+                            <>
+                                Fixed Monday to Sunday week in Australia/Sydney time. Independent of the period filter
+                                above. Topic insights use keyword matching on review text.
+                            </>
+                        }
+                    />
                     <Link
                         href={reviewsUrl}
                         className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline"
@@ -57,6 +67,13 @@ function WeeklySnapshotContent({ snapshot }: { snapshot: WeeklySnapshot }) {
                         }
                         subtitle={`${snapshot.averageRating.reviewCount} reviews · ${formatDelta(snapshot.averageRating.delta)}`}
                         tone="success"
+                        infoLabel="About weekly average rating"
+                        info={
+                            <>
+                                Mean guest score for the current calendar week. Compared to the previous Monday-Sunday
+                                week in Sydney time.
+                            </>
+                        }
                     />
                     <div className="space-y-2 md:col-span-2">
                         <p className="text-sm font-medium text-muted-foreground">Weekly insight</p>

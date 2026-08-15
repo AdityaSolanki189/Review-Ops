@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { format } from 'date-fns'
 import { RefreshCw } from 'lucide-react'
 import { EmptyState, SyncStatusBadge } from '@/components/dashboard/dashboard-parts'
+import { CardHeaderWithInfo } from '@/components/dashboard/info-tip'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { shortPropertyName } from '@/lib/dashboard-scope'
 import type { SyncHealth } from '@/lib/queries/dashboard.queries'
@@ -13,8 +14,18 @@ export function SyncHealthList({ data }: { data: SyncHealth }) {
         return (
             <Card>
                 <CardHeader>
-                    <CardTitle>Sync health</CardTitle>
-                    <CardDescription>Last scrape run per property</CardDescription>
+                    <CardHeaderWithInfo
+                        title={<CardTitle>Sync health</CardTitle>}
+                        description={<CardDescription>Last scrape run per property</CardDescription>}
+                        infoLabel="About sync health"
+                        info={
+                            <>
+                                Last Booking.com scrape status for each property. Blocked or failed runs stop without
+                                overwriting existing reviews. Data shown here may still be from an earlier successful
+                                sync.
+                            </>
+                        }
+                    />
                 </CardHeader>
                 <CardContent>
                     <EmptyState icon={RefreshCw} message="No sync runs recorded yet." />
@@ -26,10 +37,17 @@ export function SyncHealthList({ data }: { data: SyncHealth }) {
     return (
         <Card>
             <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-                <div>
-                    <CardTitle>Sync health</CardTitle>
-                    <CardDescription>Last scrape run per property</CardDescription>
-                </div>
+                <CardHeaderWithInfo
+                    title={<CardTitle>Sync health</CardTitle>}
+                    description={<CardDescription>Last scrape run per property</CardDescription>}
+                    infoLabel="About sync health"
+                    info={
+                        <>
+                            Last Booking.com scrape status for each property. Blocked or failed runs stop without
+                            overwriting existing reviews. Data shown here may still be from an earlier successful sync.
+                        </>
+                    }
+                />
                 <Link
                     href="/sync"
                     className="shrink-0 text-sm font-medium text-primary underline-offset-4 hover:underline"

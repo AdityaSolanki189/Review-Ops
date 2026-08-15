@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { TrendingDown, TrendingUp } from 'lucide-react'
+import { InfoTip } from '@/components/dashboard/info-tip'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { ReviewDetailSheet } from '@/components/reviews/review-detail-sheet'
@@ -179,6 +180,8 @@ export function MetricCard({
     icon: Icon,
     tone = 'primary',
     invertDelta,
+    info,
+    infoLabel,
 }: {
     title: string
     value: string
@@ -190,6 +193,8 @@ export function MetricCard({
     tone?: MetricTone
     /** When true, negative delta is shown as positive (e.g. low-score rate) */
     invertDelta?: boolean
+    info?: React.ReactNode
+    infoLabel?: string
 }) {
     const showDelta = delta !== null && delta !== undefined && !insufficient
     const isPositive = showDelta && (invertDelta ? (delta ?? 0) < 0 : (delta ?? 0) > 0)
@@ -207,16 +212,19 @@ export function MetricCard({
                     ) : (
                         <div />
                     )}
-                    {TrendIcon ? (
-                        <TrendIcon
-                            className={cn(
-                                'size-4 shrink-0',
-                                isPositive && 'text-success',
-                                isNegative && 'text-destructive',
-                            )}
-                            aria-hidden
-                        />
-                    ) : null}
+                    <div className="flex shrink-0 items-center gap-0.5">
+                        {TrendIcon ? (
+                            <TrendIcon
+                                className={cn(
+                                    'size-4 shrink-0',
+                                    isPositive && 'text-success',
+                                    isNegative && 'text-destructive',
+                                )}
+                                aria-hidden
+                            />
+                        ) : null}
+                        {info && infoLabel ? <InfoTip label={infoLabel}>{info}</InfoTip> : null}
+                    </div>
                 </div>
                 <div className="min-w-0">
                     <p className="text-sm font-medium text-muted-foreground">{title}</p>

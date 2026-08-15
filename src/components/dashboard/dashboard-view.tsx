@@ -5,8 +5,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { useSearchParams } from 'next/navigation'
-import { AlertTriangle, BarChart3, Inbox, Info, MessageSquare, Star, ThumbsDown } from 'lucide-react'
+import { AlertTriangle, BarChart3, Inbox, MessageSquare, Star, ThumbsDown } from 'lucide-react'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
+import { CardHeaderWithInfo, InfoTip } from '@/components/dashboard/info-tip'
 import { NeedsAttentionCard } from '@/components/dashboard/needs-attention-card'
 import {
     EmptyState,
@@ -19,11 +20,11 @@ import {
 import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
 import { SyncHealthList } from '@/components/dashboard/sync-health-list'
 import { WeeklySnapshotCard } from '@/components/dashboard/weekly-snapshot-card'
+import { WhatGuestsLoveCard } from '@/components/dashboard/what-guests-love-card'
 import { QueryState, RefreshButton } from '@/components/query-state'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatTopicLabel } from '@/lib/classification/topics'
 import type { ReviewTopicKey } from '@/lib/classification/topics'
@@ -169,6 +170,13 @@ export function DashboardView() {
                             insufficient={overview.averageRating.status === 'insufficient_data'}
                             icon={Star}
                             tone="primary"
+                            infoLabel="About average rating"
+                            info={
+                                <>
+                                    Mean guest score from 0 to 10 across all reviews in the selected period. The badge
+                                    shows the change versus the previous period of the same length.
+                                </>
+                            }
                         />
                         <MetricCard
                             title="Review activity"
@@ -183,6 +191,13 @@ export function DashboardView() {
                             insufficient={overview.reviewActivity.status === 'insufficient_data'}
                             icon={MessageSquare}
                             tone="success"
+                            infoLabel="About review activity"
+                            info={
+                                <>
+                                    Total number of guest reviews collected in the selected period. The badge shows how
+                                    many more or fewer reviews you received versus the previous period.
+                                </>
+                            }
                         />
                         <MetricCard
                             title="Low-score rate"
@@ -198,6 +213,13 @@ export function DashboardView() {
                             icon={ThumbsDown}
                             tone="destructive"
                             invertDelta
+                            infoLabel="About low-score rate"
+                            info={
+                                <>
+                                    Share of reviews scored 5 or below in this period. A falling rate is an improvement.
+                                    The badge shows the change in percentage points versus the previous period.
+                                </>
+                            }
                         />
                         <MetricCard
                             title="Top negative topic"
@@ -217,6 +239,14 @@ export function DashboardView() {
                             icon={AlertTriangle}
                             tone="warning"
                             invertDelta
+                            infoLabel="About top negative topic"
+                            info={
+                                <>
+                                    The topic mentioned most often in a negative tone. The percentage is its share of
+                                    all reviews in this period. The badge shows how that share changed versus the
+                                    previous period.
+                                </>
+                            }
                         />
                     </div>
                 ) : null}
@@ -265,11 +295,23 @@ export function DashboardView() {
                             {seriesQuery.data ? (
                                 <Card>
                                     <CardHeader>
-                                        <CardTitle>Rating trend</CardTitle>
-                                        <CardDescription>
-                                            {seriesQuery.data.granularity === 'day' ? 'Daily' : 'Weekly'} average rating
-                                            and review volume
-                                        </CardDescription>
+                                        <CardHeaderWithInfo
+                                            title={<CardTitle>Rating trend</CardTitle>}
+                                            description={
+                                                <CardDescription>
+                                                    {seriesQuery.data.granularity === 'day' ? 'Daily' : 'Weekly'}{' '}
+                                                    average rating and review volume
+                                                </CardDescription>
+                                            }
+                                            infoLabel="About rating trend"
+                                            info={
+                                                <>
+                                                    Average rating over time on the left axis, review count on the
+                                                    right. Empty buckets mean no reviews were collected that day or
+                                                    week.
+                                                </>
+                                            }
+                                        />
                                     </CardHeader>
                                     <CardContent>
                                         {seriesQuery.data.rating.length === 0 ? (
@@ -305,8 +347,22 @@ export function DashboardView() {
                             {seriesQuery.data ? (
                                 <Card>
                                     <CardHeader>
-                                        <CardTitle>Rating distribution</CardTitle>
-                                        <CardDescription>How scores cluster in the selected period</CardDescription>
+                                        <CardHeaderWithInfo
+                                            title={<CardTitle>Rating distribution</CardTitle>}
+                                            description={
+                                                <CardDescription>
+                                                    How scores cluster in the selected period
+                                                </CardDescription>
+                                            }
+                                            infoLabel="About rating distribution"
+                                            info={
+                                                <>
+                                                    Number of reviews in each score band for the selected period. Helps
+                                                    you see whether results cluster at the top, middle, or bottom of the
+                                                    scale.
+                                                </>
+                                            }
+                                        />
                                     </CardHeader>
                                     <CardContent>
                                         {seriesQuery.data.ratingBands.length === 0 ? (
@@ -339,10 +395,22 @@ export function DashboardView() {
                         {topicMatrixQuery.data ? (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Topic heatmap</CardTitle>
-                                    <CardDescription>
-                                        Negative mention rate by property and topic (% of reviews)
-                                    </CardDescription>
+                                    <CardHeaderWithInfo
+                                        title={<CardTitle>Topic heatmap</CardTitle>}
+                                        description={
+                                            <CardDescription>
+                                                Negative mention rate by property and topic (% of reviews)
+                                            </CardDescription>
+                                        }
+                                        infoLabel="About topic heatmap"
+                                        info={
+                                            <>
+                                                Each cell shows what percent of that property&apos;s reviews mention the
+                                                topic negatively. Stronger red means a higher share. Tap a cell for an
+                                                explanation.
+                                            </>
+                                        }
+                                    />
                                 </CardHeader>
                                 <CardContent className="overflow-x-auto">
                                     {topicMatrixQuery.data.rows.length === 0 ? (
@@ -494,11 +562,23 @@ export function DashboardView() {
                         {topicImpactQuery.data && topicImpactQuery.data.topics.length > 0 ? (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Topic rating impact</CardTitle>
-                                    <CardDescription>
-                                        Which negative topics correlate with the lowest scores (association, not
-                                        causality)
-                                    </CardDescription>
+                                    <CardHeaderWithInfo
+                                        title={<CardTitle>Topic rating impact</CardTitle>}
+                                        description={
+                                            <CardDescription>
+                                                Which negative topics correlate with the lowest scores (association, not
+                                                causality)
+                                            </CardDescription>
+                                        }
+                                        infoLabel="About topic rating impact"
+                                        info={
+                                            <>
+                                                Topics ranked by how much negative mentions coincide with lower scores.
+                                                This shows association, not a proven cause. Use it to prioritize
+                                                follow-up, not to assign blame.
+                                            </>
+                                        }
+                                    />
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-3 md:hidden">
@@ -545,8 +625,25 @@ export function DashboardView() {
                                                     <TableHead>Topic</TableHead>
                                                     <TableHead>Negative mentions</TableHead>
                                                     <TableHead>Avg rating</TableHead>
-                                                    <TableHead>Rating gap</TableHead>
-                                                    <TableHead>Impact score</TableHead>
+                                                    <TableHead>
+                                                        <span className="inline-flex items-center gap-0.5">
+                                                            Rating gap
+                                                            <InfoTip label="Rating gap">
+                                                                Average rating of those reviews minus the period
+                                                                average. Negative means those guests scored lower.
+                                                            </InfoTip>
+                                                        </span>
+                                                    </TableHead>
+                                                    <TableHead>
+                                                        <span className="inline-flex items-center gap-0.5">
+                                                            Impact score
+                                                            <InfoTip label="Impact score">
+                                                                Absolute rating gap multiplied by negative mention
+                                                                count. Higher values mean more reviews affected at a
+                                                                lower score.
+                                                            </InfoTip>
+                                                        </span>
+                                                    </TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -596,29 +693,7 @@ export function DashboardView() {
                         }
                     >
                         {overview && overview.positiveDrivers.length > 0 ? (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>What guests love</CardTitle>
-                                    <CardDescription>Top positive operational drivers in this period</CardDescription>
-                                </CardHeader>
-                                <CardContent className="grid gap-3 md:grid-cols-2">
-                                    {overview.positiveDrivers.slice(0, 6).map((driver) => (
-                                        <div key={driver.topic} className="rounded-lg border p-3">
-                                            <p className="font-medium">{formatTopicLabel(driver.topic)}</p>
-                                            <p className="mt-1 text-sm text-muted-foreground">
-                                                {driver.positiveMentionRate?.toFixed(1) ?? '0'}% positive ·{' '}
-                                                {driver.mentionCount} mentions
-                                            </p>
-                                            {driver.momentumPercentagePoints !== null ? (
-                                                <p className="mt-1 font-mono text-xs tabular-nums text-muted-foreground">
-                                                    {driver.momentumPercentagePoints >= 0 ? '+' : ''}
-                                                    {driver.momentumPercentagePoints.toFixed(1)} pp vs prior
-                                                </p>
-                                            ) : null}
-                                        </div>
-                                    ))}
-                                </CardContent>
-                            </Card>
+                            <WhatGuestsLoveCard drivers={overview.positiveDrivers} />
                         ) : null}
                     </QueryState>
                 </div>
@@ -644,12 +719,24 @@ export function DashboardView() {
                         {briefingQuery.data?.available ? (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Portfolio brief</CardTitle>
-                                    <CardDescription>
-                                        {briefingQuery.data.source === 'ai'
-                                            ? 'AI-enhanced summary from calculated metrics'
-                                            : 'Summary from calculated metrics'}
-                                    </CardDescription>
+                                    <CardHeaderWithInfo
+                                        title={<CardTitle>Portfolio brief</CardTitle>}
+                                        description={
+                                            <CardDescription>
+                                                {briefingQuery.data.source === 'ai'
+                                                    ? 'AI-enhanced summary from calculated metrics'
+                                                    : 'Summary from calculated metrics'}
+                                            </CardDescription>
+                                        }
+                                        infoLabel="About portfolio brief"
+                                        info={
+                                            <>
+                                                Short summary of the selected period built from the same calculated
+                                                metrics shown elsewhere. When an AI key is configured, wording is
+                                                enhanced but the numbers stay the same.
+                                            </>
+                                        }
+                                    />
                                 </CardHeader>
                                 <CardContent className="space-y-3 text-sm">
                                     <p>{briefingQuery.data.summary}</p>
@@ -665,7 +752,17 @@ export function DashboardView() {
                         ) : briefingQuery.data && !briefingQuery.data.available ? (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Portfolio brief</CardTitle>
+                                    <CardHeaderWithInfo
+                                        title={<CardTitle>Portfolio brief</CardTitle>}
+                                        infoLabel="About portfolio brief"
+                                        info={
+                                            <>
+                                                Short summary of the selected period built from calculated metrics.
+                                                Unavailable when there is not enough review data for a meaningful
+                                                summary.
+                                            </>
+                                        }
+                                    />
                                 </CardHeader>
                                 <CardContent className="text-sm text-muted-foreground">
                                     {briefingQuery.data.message}
@@ -686,7 +783,13 @@ export function DashboardView() {
                     >
                         {statusSignals.length > 0 ? (
                             <div>
-                                <p className="mb-3 text-sm font-medium">Portfolio signals</p>
+                                <div className="mb-3 flex items-start gap-1">
+                                    <p className="min-w-0 flex-1 text-sm font-medium">Portfolio signals</p>
+                                    <InfoTip label="About portfolio signals">
+                                        Highlights the strongest portfolio movements this period: overall rating,
+                                        improvements, recurring complaints, positive drivers, and statistical anomalies.
+                                    </InfoTip>
+                                </div>
                                 <PortfolioStatusStrip signals={statusSignals} orientation="vertical" />
                             </div>
                         ) : null}
@@ -696,8 +799,22 @@ export function DashboardView() {
                         <>
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Coverage</CardTitle>
-                                    <CardDescription>Data quality and score mix for this period</CardDescription>
+                                    <CardHeaderWithInfo
+                                        title={<CardTitle>Coverage</CardTitle>}
+                                        description={
+                                            <CardDescription>
+                                                Data quality and score mix for this period
+                                            </CardDescription>
+                                        }
+                                        infoLabel="About coverage"
+                                        info={
+                                            <>
+                                                Classification coverage is the share of reviews with topic tags. The
+                                                other bars repeat low-score rate and average rating from the KPI row for
+                                                quick reference.
+                                            </>
+                                        }
+                                    />
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <SignalBar
@@ -738,27 +855,17 @@ export function DashboardView() {
                             </Card>
                             <Card>
                                 <CardHeader>
-                                    <div className="flex items-start gap-1">
-                                        <div className="min-w-0 flex-1">
-                                            <CardTitle>Sentiment</CardTitle>
-                                            <CardDescription>Classified topic mention mix</CardDescription>
-                                        </div>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <button
-                                                    type="button"
-                                                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
-                                                    aria-label="About sentiment mix"
-                                                >
-                                                    <Info className="size-4" aria-hidden />
-                                                </button>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="top" className="max-w-xs text-sm">
+                                    <CardHeaderWithInfo
+                                        title={<CardTitle>Sentiment</CardTitle>}
+                                        description={<CardDescription>Classified topic mention mix</CardDescription>}
+                                        infoLabel="About sentiment mix"
+                                        info={
+                                            <>
                                                 Share of classified topic mentions in this property and period. A review
                                                 with mixed topics can contribute to more than one slice.
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    </div>
+                                            </>
+                                        }
+                                    />
                                 </CardHeader>
                                 <CardContent>
                                     <SentimentPieChart mix={overview.sentimentMix} />
@@ -835,11 +942,22 @@ export function DashboardView() {
                 {overview ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Property comparison</CardTitle>
-                            <CardDescription>
-                                Current period vs previous period. Portfolio average:{' '}
-                                {portfolioAvg !== null ? portfolioAvg.toFixed(1) : 'n/a'}
-                            </CardDescription>
+                            <CardHeaderWithInfo
+                                title={<CardTitle>Property comparison</CardTitle>}
+                                description={
+                                    <CardDescription>
+                                        Current period vs previous period. Portfolio average:{' '}
+                                        {portfolioAvg !== null ? portfolioAvg.toFixed(1) : 'n/a'}
+                                    </CardDescription>
+                                }
+                                infoLabel="About property comparison"
+                                info={
+                                    <>
+                                        Each property compared to its previous period and to the portfolio average for
+                                        the same dates. Use it to spot which sites are pulling the average up or down.
+                                    </>
+                                }
+                            />
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-3 md:hidden">
@@ -907,9 +1025,25 @@ export function DashboardView() {
                                             <TableHead>Property</TableHead>
                                             <TableHead>Rating</TableHead>
                                             <TableHead>vs previous</TableHead>
-                                            <TableHead>vs portfolio</TableHead>
+                                            <TableHead>
+                                                <span className="inline-flex items-center gap-0.5">
+                                                    vs portfolio
+                                                    <InfoTip label="Vs portfolio">
+                                                        Property average rating minus the portfolio average for this
+                                                        period. Positive means above the group average.
+                                                    </InfoTip>
+                                                </span>
+                                            </TableHead>
                                             <TableHead>Reviews</TableHead>
-                                            <TableHead>Low-score rate</TableHead>
+                                            <TableHead>
+                                                <span className="inline-flex items-center gap-0.5">
+                                                    Low-score rate
+                                                    <InfoTip label="Low-score rate">
+                                                        Share of that property&apos;s reviews scored 5 or below in this
+                                                        period.
+                                                    </InfoTip>
+                                                </span>
+                                            </TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>

@@ -6,6 +6,7 @@ import { formatDistanceToNow } from 'date-fns'
 import type { LucideIcon } from 'lucide-react'
 import { MessageSquare, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/dashboard-parts'
+import { CardHeaderWithInfo } from '@/components/dashboard/info-tip'
 import { ReviewDetailSheet } from '@/components/reviews/review-detail-sheet'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { shortPropertyName } from '@/lib/dashboard-scope'
@@ -47,8 +48,17 @@ export function ActivityFeed({ reviews }: { reviews: RecentReviews }) {
         return (
             <Card>
                 <CardHeader>
-                    <CardTitle>Recent activity</CardTitle>
-                    <CardDescription>Latest guest reviews across the portfolio</CardDescription>
+                    <CardHeaderWithInfo
+                        title={<CardTitle>Recent activity</CardTitle>}
+                        description={<CardDescription>Latest guest reviews across the portfolio</CardDescription>}
+                        infoLabel="About recent activity"
+                        info={
+                            <>
+                                Newest reviews across all properties, regardless of the period filter. Open a row to
+                                read the full review and topic tags.
+                            </>
+                        }
+                    />
                 </CardHeader>
                 <CardContent>
                     <EmptyState icon={MessageSquare} message="No reviews yet. Run pnpm scrape after seeding." />
@@ -61,10 +71,17 @@ export function ActivityFeed({ reviews }: { reviews: RecentReviews }) {
         <>
             <Card>
                 <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
-                    <div>
-                        <CardTitle>Recent activity</CardTitle>
-                        <CardDescription>Latest guest reviews across the portfolio</CardDescription>
-                    </div>
+                    <CardHeaderWithInfo
+                        title={<CardTitle>Recent activity</CardTitle>}
+                        description={<CardDescription>Latest guest reviews across the portfolio</CardDescription>}
+                        infoLabel="About recent activity"
+                        info={
+                            <>
+                                Newest reviews across all properties, regardless of the period filter. Open a row to
+                                read the full review and topic tags.
+                            </>
+                        }
+                    />
                     <Link
                         href="/reviews"
                         className="shrink-0 text-sm font-medium text-primary underline-offset-4 hover:underline"

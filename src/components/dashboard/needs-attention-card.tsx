@@ -1,13 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { Info } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/dashboard-parts'
+import { InfoTip } from '@/components/dashboard/info-tip'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { formatTopicLabel } from '@/lib/classification/topics'
 import type { ReviewTopicKey } from '@/lib/classification/topics'
 import type { IssueSignal } from '@/lib/analytics'
@@ -15,25 +14,6 @@ import type { AnalyticsScope } from '@/lib/analytics'
 import { buildReviewsDrillDownUrl } from '@/lib/dashboard-scope'
 import { isAnomalyIssue } from '@/lib/dashboard-status'
 import { cn } from '@/lib/utils/utils'
-
-function InfoTip({ label, children }: { label: string; children: React.ReactNode }) {
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <button
-                    type="button"
-                    className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground"
-                    aria-label={label}
-                >
-                    <Info className="size-4" aria-hidden />
-                </button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-xs text-sm">
-                {children}
-            </TooltipContent>
-        </Tooltip>
-    )
-}
 
 function GapPill({ gap }: { gap: number }) {
     const negative = gap < 0
