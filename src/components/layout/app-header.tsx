@@ -24,7 +24,7 @@ function slugToTitle(slug: string): string {
 
 function getPropertySlug(pathname: string): string | null {
     if (!pathname.startsWith('/properties/')) return null
-    const slug = pathname.slice('/properties/'.length).split('/')[0]
+    const slug = pathname.slice('/properties/'.length).split('/')[0] ?? ''
     return slug.length > 0 ? slug : null
 }
 
