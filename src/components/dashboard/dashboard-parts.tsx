@@ -303,7 +303,7 @@ export function SignalBar({
                             style={{ transform: `scaleX(${clamped / 100})` }}
                         />
                     </div>
-                    <span className="w-8 shrink-0 text-right font-mono text-sm font-medium tabular-nums">{value}</span>
+                    <span className="w-10 shrink-0 text-right font-mono text-sm font-medium tabular-nums">{value}</span>
                 </div>
             ) : (
                 <>

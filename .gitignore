@@ -44,6 +44,7 @@ next-env.d.ts
 # AI / local agent files (keep local, never push)
 .claude/
 CLAUDE.md
+INTERVIEW-PREP.md
 AGENTS.md
 .mcp.json
 .cursor/
