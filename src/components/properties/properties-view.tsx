@@ -3,28 +3,37 @@
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { ThumbsDown, Star } from 'lucide-react'
+import { ArrowDown, Star, ThumbsDown } from 'lucide-react'
 import { SignalBar } from '@/components/dashboard/dashboard-parts'
 import { DashboardScopeBar } from '@/components/dashboard/scope-bar'
 import { PageIntro } from '@/components/layout/page-intro'
 import { QueryState } from '@/components/query-state'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { buildScopeQueryString, resolveScopeFromSearchParams, shortPropertyName } from '@/lib/dashboard-scope'
 import { formatMetricValue } from '@/lib/dashboard-status'
 import { useDashboardOverviewQuery } from '@/lib/queries/dashboard.queries'
 import { usePropertiesListQuery } from '@/lib/queries/properties.queries'
+import { cn } from '@/lib/utils/utils'
 
 const SentimentPieChart = dynamic(
     () => import('@/components/dashboard/dashboard-charts').then((module) => module.SentimentPieChart),
-    { ssr: false, loading: () => <Skeleton className="h-[180px] w-full" /> },
+    { ssr: false, loading: () => <Skeleton className="size-20 rounded-full" /> },
 )
 
-function formatActivityDelta(delta: number | null): string | null {
+const propertySurfaceHoverClass =
+    'transition-[transform,box-shadow] duration-160 ease-[var(--ease-out)] [@media(hover:hover)_and_(pointer:fine)]:hover:-translate-y-px [@media(hover:hover)_and_(pointer:fine)]:hover:shadow-sm motion-reduce:transition-none motion-reduce:hover:translate-y-0'
+
+function formatReviewActivityDelta(
+    delta: number | null,
+): { value: string; tone: 'success' | 'destructive' | 'muted' } | null {
     if (delta === null) return null
     const sign = delta >= 0 ? '+' : ''
-    return `${sign}${Math.round(delta)} vs previous`
+    return {
+        value: `${sign}${Math.round(delta)}`,
+        tone: delta > 0 ? 'success' : delta < 0 ? 'destructive' : 'muted',
+    }
 }
 
 export function PropertiesView() {
@@ -45,77 +54,138 @@ export function PropertiesView() {
                 error={overviewQuery.error}
                 onRetry={() => void overviewQuery.refetch()}
                 skeleton={
-                    <div className="grid gap-4 md:grid-cols-2">
-                        <Skeleton className="h-56" />
-                        <Skeleton className="h-56" />
-                        <Skeleton className="h-56" />
-                        <Skeleton className="h-56" />
+                    <div className="grid gap-6 md:grid-cols-2">
+                        <Skeleton className="h-72 rounded-xl" />
+                        <Skeleton className="h-72 rounded-xl" />
+                        <Skeleton className="h-72 rounded-xl" />
+                        <Skeleton className="h-72 rounded-xl" />
                     </div>
                 }
             >
                 {overviewQuery.data ? (
-                    <div className="grid gap-4 md:grid-cols-2">
+                    <div className="grid gap-6 md:grid-cols-2">
                         {overviewQuery.data.propertyComparison.map((row) => {
-                            const activityDelta = formatActivityDelta(row.reviewActivity.delta)
+                            const activityDelta = formatReviewActivityDelta(row.reviewActivity.delta)
+                            const lowScoreHigh = row.lowScoreRate.value !== null && row.lowScoreRate.value > 20
+                            const ratingDisplay = formatMetricValue(row.averageRating)
+                            const hasReviews = row.reviewActivity.sampleSize > 0
+
                             return (
                                 <Card
                                     key={row.property.slug}
-                                    className="transition-colors duration-150 ease-[var(--ease-out)] hover:border-primary/20 motion-reduce:transition-none"
+                                    className={cn(
+                                        'flex h-full flex-col gap-0 bg-primary/5 py-0',
+                                        propertySurfaceHoverClass,
+                                    )}
                                 >
-                                    <CardHeader className="pb-3">
-                                        <CardTitle className="text-base">
-                                            {shortPropertyName(row.property.name)}
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-                                            <div className="flex items-center gap-2">
-                                                <Star className="size-4 text-success" aria-hidden />
-                                                <span className="font-mono text-lg font-semibold tabular-nums">
-                                                    {formatMetricValue(row.averageRating)}
-                                                </span>
-                                                <span className="text-muted-foreground">
-                                                    avg · {row.reviewActivity.sampleSize} reviews
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <ThumbsDown className="size-4 text-warning" aria-hidden />
-                                                <span className="font-mono font-semibold tabular-nums">
-                                                    {row.lowScoreRate.value === null
-                                                        ? '—'
-                                                        : `${row.lowScoreRate.value.toFixed(1)}%`}
-                                                </span>
-                                                <span className="text-muted-foreground">low-score</span>
-                                            </div>
+                                    <CardHeader className="gap-3 border-b px-5 pb-5">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <CardTitle className="text-xl">
+                                                {shortPropertyName(row.property.name)}
+                                            </CardTitle>
+                                            <CardAction>
+                                                <ThumbsDown
+                                                    className={cn(
+                                                        'size-5 shrink-0',
+                                                        lowScoreHigh ? 'text-destructive' : 'text-muted-foreground',
+                                                    )}
+                                                    aria-hidden
+                                                />
+                                            </CardAction>
                                         </div>
-                                        {row.reviewActivity.sampleSize === 0 ? (
-                                            <p className="text-sm text-muted-foreground">No reviews in this period</p>
-                                        ) : activityDelta ? (
-                                            <p className="text-sm text-muted-foreground">{activityDelta}</p>
-                                        ) : null}
-                                        <div className="grid grid-cols-[auto_1fr] items-center gap-4">
-                                            <div className="flex flex-col items-center gap-1">
-                                                <span className="text-xs text-muted-foreground">Sentiment</span>
-                                                <SentimentPieChart mix={row.sentimentMix} compact />
-                                            </div>
-                                            <SignalBar
-                                                label="Classified"
-                                                value={
-                                                    row.classificationCoverage === null
-                                                        ? 'n/a'
-                                                        : `${row.classificationCoverage.toFixed(0)}%`
-                                                }
-                                                percentage={row.classificationCoverage ?? 0}
-                                                tone="primary"
-                                            />
-                                        </div>
-                                        <Button asChild className="min-h-11 w-full sm:w-auto">
-                                            <Link
-                                                href={`/properties/${row.property.slug}?${buildScopeQueryString(scope)}`}
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                                            <Star className="size-4 shrink-0 text-success" aria-hidden />
+                                            <span
+                                                className={cn(
+                                                    'font-mono font-semibold tabular-nums',
+                                                    hasReviews ? 'text-success' : 'text-muted-foreground',
+                                                )}
                                             >
-                                                View property
-                                            </Link>
-                                        </Button>
+                                                {ratingDisplay}
+                                            </span>
+                                            <span className="text-foreground">
+                                                avg · {row.reviewActivity.sampleSize}{' '}
+                                                {row.reviewActivity.sampleSize === 1 ? 'review' : 'reviews'}
+                                            </span>
+                                            {row.lowScoreRate.value === null ? (
+                                                <span className="text-muted-foreground">
+                                                    <span className="mx-1 font-bold text-destructive">—</span>
+                                                    low-score
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1.5 text-foreground">
+                                                    <ArrowDown
+                                                        className={cn(
+                                                            'size-3',
+                                                            lowScoreHigh ? 'text-destructive' : 'text-muted-foreground',
+                                                        )}
+                                                        aria-hidden
+                                                    />
+                                                    <span
+                                                        className={cn(
+                                                            'font-mono font-semibold tabular-nums',
+                                                            lowScoreHigh ? 'text-destructive' : 'text-foreground',
+                                                        )}
+                                                    >
+                                                        {row.lowScoreRate.value.toFixed(1)}%
+                                                    </span>
+                                                    <span className="text-foreground">low-score</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="flex flex-1 flex-col p-5">
+                                        <div className="grid flex-1 grid-cols-2 gap-8">
+                                            <div>
+                                                <div className="mb-4 flex items-start justify-between gap-2">
+                                                    <span className="text-sm font-medium">Sentiment</span>
+                                                    {activityDelta ? (
+                                                        <div className="text-right text-xs leading-tight">
+                                                            <span
+                                                                className={cn(
+                                                                    'font-mono font-medium tabular-nums',
+                                                                    activityDelta.tone === 'success' && 'text-success',
+                                                                    activityDelta.tone === 'destructive' &&
+                                                                        'text-destructive',
+                                                                    activityDelta.tone === 'muted' &&
+                                                                        'text-muted-foreground',
+                                                                )}
+                                                            >
+                                                                {activityDelta.value}
+                                                            </span>
+                                                            <br />
+                                                            <span className="text-[10px] text-muted-foreground">
+                                                                vs previous
+                                                            </span>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                                <div className="flex justify-center">
+                                                    <SentimentPieChart mix={row.sentimentMix} compact />
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <p className="mb-6 text-sm font-medium">Classified</p>
+                                                <SignalBar
+                                                    label="Classified"
+                                                    hideLabel
+                                                    value={
+                                                        row.classificationCoverage === null
+                                                            ? 'n/a'
+                                                            : `${row.classificationCoverage.toFixed(0)}%`
+                                                    }
+                                                    percentage={row.classificationCoverage ?? 0}
+                                                    tone="primary"
+                                                />
+                                                <Button asChild className="mt-auto min-h-11 w-full">
+                                                    <Link
+                                                        href={`/properties/${row.property.slug}?${buildScopeQueryString(scope)}`}
+                                                    >
+                                                        View property
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </CardContent>
                                 </Card>
                             )

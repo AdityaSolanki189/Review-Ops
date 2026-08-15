@@ -182,6 +182,7 @@ export function MetricCard({
     invertDelta,
     info,
     infoLabel,
+    className,
 }: {
     title: string
     value: string
@@ -195,6 +196,7 @@ export function MetricCard({
     invertDelta?: boolean
     info?: React.ReactNode
     infoLabel?: string
+    className?: string
 }) {
     const showDelta = delta !== null && delta !== undefined && !insufficient
     const isPositive = showDelta && (invertDelta ? (delta ?? 0) < 0 : (delta ?? 0) > 0)
@@ -202,7 +204,12 @@ export function MetricCard({
     const TrendIcon = isPositive ? TrendingUp : isNegative ? TrendingDown : null
 
     return (
-        <Card className="transition-shadow duration-200 ease-[var(--ease-out)] hover:shadow-sm motion-reduce:transition-none">
+        <Card
+            className={cn(
+                'transition-shadow duration-200 ease-[var(--ease-out)] hover:shadow-sm motion-reduce:transition-none',
+                className,
+            )}
+        >
             <CardContent className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
                     {Icon ? (
@@ -266,11 +273,13 @@ export function SignalBar({
     value,
     percentage,
     tone = 'primary',
+    hideLabel = false,
 }: {
     label: string
     value: string
     percentage: number
     tone?: MetricTone
+    hideLabel?: boolean
 }) {
     const fillClass: Record<MetricTone, string> = {
         primary: 'bg-primary',
@@ -283,19 +292,36 @@ export function SignalBar({
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2 text-sm">
-                <span className="text-muted-foreground">{label}</span>
-                <span className="font-mono font-medium tabular-nums">{value}</span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                    className={cn(
-                        'h-full origin-left rounded-full transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none',
-                        fillClass[tone],
-                    )}
-                    style={{ transform: `scaleX(${clamped / 100})` }}
-                />
-            </div>
+            {hideLabel ? (
+                <div className="flex items-center gap-3">
+                    <div className="h-3 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                            className={cn(
+                                'h-full origin-left rounded-full transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none',
+                                fillClass[tone],
+                            )}
+                            style={{ transform: `scaleX(${clamped / 100})` }}
+                        />
+                    </div>
+                    <span className="w-8 shrink-0 text-right font-mono text-sm font-medium tabular-nums">{value}</span>
+                </div>
+            ) : (
+                <>
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-muted-foreground">{label}</span>
+                        <span className="font-mono font-medium tabular-nums">{value}</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                        <div
+                            className={cn(
+                                'h-full origin-left rounded-full transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none',
+                                fillClass[tone],
+                            )}
+                            style={{ transform: `scaleX(${clamped / 100})` }}
+                        />
+                    </div>
+                </>
+            )}
         </div>
     )
 }

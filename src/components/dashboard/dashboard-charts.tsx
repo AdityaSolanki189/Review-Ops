@@ -58,7 +58,12 @@ export function SentimentPieChart({
     const total = mix.positive + mix.neutral + mix.negative
     if (total === 0) {
         return compact ? (
-            <p className="text-xs text-muted-foreground">No classified mentions</p>
+            <div className="relative flex size-20 items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-muted" />
+                <div className="absolute inset-[15px] rounded-full bg-background" />
+                <span className="relative z-10 text-sm text-muted-foreground">n/a</span>
+                <span className="sr-only">No classified mentions</span>
+            </div>
         ) : (
             <EmptyState message="No classified topic mentions in this period." />
         )

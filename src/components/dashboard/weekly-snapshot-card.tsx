@@ -13,6 +13,10 @@ import { formatTopicLabel } from '@/lib/classification/topics'
 import { buildWeeklyReviewsUrl, shortPropertyName } from '@/lib/dashboard-scope'
 import type { WeeklySnapshot } from '@/lib/queries/dashboard.queries'
 import { formatNegativeTopicInsight, formatPositiveTopicInsight } from '@/lib/weekly-snapshot'
+import { cn } from '@/lib/utils/utils'
+
+const weeklySurfaceHoverClass =
+    'transition-[transform,box-shadow] duration-160 ease-[var(--ease-out)] [@media(hover:hover)_and_(pointer:fine)]:hover:-translate-y-px [@media(hover:hover)_and_(pointer:fine)]:hover:shadow-sm motion-reduce:transition-none motion-reduce:hover:translate-y-0'
 
 function formatWeekRange(weekStart: string, weekEnd: string): string {
     const start = format(new Date(`${weekStart}T00:00:00`), 'd MMM')
@@ -57,8 +61,9 @@ function WeeklySnapshotContent({ snapshot }: { snapshot: WeeklySnapshot }) {
                 </div>
             </CardHeader>
             <CardContent className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid items-stretch gap-4 md:grid-cols-2">
                     <MetricCard
+                        className={cn('h-full bg-success/5 hover:shadow-none', weeklySurfaceHoverClass)}
                         title="Average rating"
                         value={
                             snapshot.averageRating.value === null
@@ -75,29 +80,33 @@ function WeeklySnapshotContent({ snapshot }: { snapshot: WeeklySnapshot }) {
                             </>
                         }
                     />
-                    <div className="space-y-2 md:col-span-2">
-                        <p className="text-sm font-medium text-muted-foreground">Weekly insight</p>
-                        {snapshot.topNegativeTopic ? (
-                            <p className="text-sm leading-relaxed">
-                                {formatNegativeTopicInsight(
-                                    formatTopicLabel(snapshot.topNegativeTopic.topic),
-                                    snapshot.topNegativeTopic.percentage,
+                    <Card className={cn('h-full bg-primary/5 py-6', weeklySurfaceHoverClass)}>
+                        <CardContent className="space-y-4">
+                            <p className="text-sm font-medium text-muted-foreground">Weekly insight</p>
+                            <div className="max-w-[65ch] space-y-2">
+                                {snapshot.topNegativeTopic ? (
+                                    <p className="text-sm leading-relaxed">
+                                        {formatNegativeTopicInsight(
+                                            formatTopicLabel(snapshot.topNegativeTopic.topic),
+                                            snapshot.topNegativeTopic.percentage,
+                                        )}
+                                    </p>
+                                ) : (
+                                    <p className="text-sm leading-relaxed text-muted-foreground">
+                                        No low-score reviews (≤5) this week to analyse yet.
+                                    </p>
                                 )}
-                            </p>
-                        ) : (
-                            <p className="text-sm text-muted-foreground">
-                                No low-score reviews (≤5) this week to analyse yet.
-                            </p>
-                        )}
-                        {snapshot.topPositiveTopic ? (
-                            <p className="text-sm leading-relaxed text-muted-foreground">
-                                {formatPositiveTopicInsight(
-                                    formatTopicLabel(snapshot.topPositiveTopic.topic),
-                                    snapshot.topPositiveTopic.percentage,
-                                )}
-                            </p>
-                        ) : null}
-                    </div>
+                                {snapshot.topPositiveTopic ? (
+                                    <p className="text-sm leading-relaxed text-muted-foreground">
+                                        {formatPositiveTopicInsight(
+                                            formatTopicLabel(snapshot.topPositiveTopic.topic),
+                                            snapshot.topPositiveTopic.percentage,
+                                        )}
+                                    </p>
+                                ) : null}
+                            </div>
+                        </CardContent>
+                    </Card>
                 </div>
 
                 <div>
@@ -198,7 +207,10 @@ export function WeeklySnapshotCard({
                         <CardTitle>This week</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <Skeleton className="h-32 w-full" />
+                        <div className="grid items-stretch gap-4 md:grid-cols-2">
+                            <Skeleton className="h-32 w-full rounded-xl" />
+                            <Skeleton className="h-32 w-full rounded-xl" />
+                        </div>
                     </CardContent>
                 </Card>
             }
