@@ -18,11 +18,18 @@ export function hashEmbeddingInput(input: string): string {
     return createHash('sha256').update(input).digest('hex')
 }
 
+const EMBED_TIMEOUT_MS = 8_000
+
 export async function embedText(value: string): Promise<number[]> {
-    const result = await embed({
-        model: getOpenRouterEmbeddingModel(),
-        value,
-    })
+    const result = await Promise.race([
+        embed({
+            model: getOpenRouterEmbeddingModel(),
+            value,
+        }),
+        new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('Embedding request timed out')), EMBED_TIMEOUT_MS)
+        }),
+    ])
     return result.embedding
 }
 

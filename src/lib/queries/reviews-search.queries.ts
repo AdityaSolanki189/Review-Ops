@@ -19,9 +19,12 @@ export interface ReviewSearchItem {
     similarity: number | null
 }
 
+export type ReviewSearchReason = 'index_empty' | 'embed_failed'
+
 export interface ReviewSearchResponse {
     mode: 'semantic' | 'keyword'
     items: ReviewSearchItem[]
+    reason?: ReviewSearchReason
 }
 
 function buildReviewSearchParams(filters: ReviewSearchFilters): string {

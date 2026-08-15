@@ -236,7 +236,7 @@ All routes live under `src/app/api/`. Dashboard scoped routes accept shared quer
 
 **Dashboard scope:** property slug (optional), date range, `compare=previous-period` for period-over-period comparison. Small sample sizes show “Not enough data”.
 
-**Semantic search:** when `OPENROUTER_API_KEY` is set, `/api/reviews/search` embeds the query via OpenRouter and ranks by cosine similarity (threshold 0.25). Without a key, falls back to keyword `ilike` search (`mode: 'keyword'`).
+**Semantic search:** when `OPENROUTER_API_KEY` is set and review embeddings exist, `/api/reviews/search` embeds the query via OpenRouter and ranks by cosine similarity (threshold 0.25). Without a key, or when the embedding index is empty, it falls back to keyword `ilike` search (`mode: 'keyword'`; `reason: 'index_empty'` when the key is set but `pnpm reviews:embed` has not been run).
 
 ## Insights methodology
 
@@ -419,6 +419,7 @@ Run `pnpm test` (Node.js built-in test runner via `tsx --test`).
 | DB connection error | Postgres not running | `docker compose up -d`, confirm port **5433** |
 | Migration fails on `vector` | Wrong Postgres image | Use `pgvector/pgvector:pg16` from `docker-compose.yml` |
 | AI briefing is basic / no per-review insight | No OpenRouter key | Briefing/explainer use deterministic fallback; insight unavailable; search uses keywords |
+| Semantic search returns 0 / keyword fallback | OpenRouter key set but embeddings never backfilled | Run `pnpm reviews:embed`; until then search uses keywords with `reason: index_empty` |
 | `pnpm reviews:embed` fails | No OpenRouter key | Set `OPENROUTER_API_KEY` |
 | Comparisons show “Not enough data” | Few reviews in period | Widen date range or wait for more reviews |
 

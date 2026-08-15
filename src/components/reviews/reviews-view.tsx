@@ -191,10 +191,21 @@ export function ReviewsView() {
                 )}
                 {isSearchMode && searchQueryResult.data ? (
                     <Badge variant="outline">
-                        {searchQueryResult.data.mode === 'semantic' ? 'Semantic search' : 'Keyword fallback'}
+                        {searchQueryResult.data.mode === 'semantic'
+                            ? 'Semantic search'
+                            : searchQueryResult.data.reason === 'index_empty'
+                              ? 'Keyword fallback (embeddings missing)'
+                              : 'Keyword fallback'}
                     </Badge>
                 ) : null}
             </div>
+
+            {isSearchMode && searchQueryResult.data?.reason === 'index_empty' ? (
+                <p className="rounded-lg border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning-foreground">
+                    Semantic search needs review embeddings. Run <code className="font-mono">pnpm reviews:embed</code>{' '}
+                    to generate them. Showing keyword matches until then.
+                </p>
+            ) : null}
 
             <QueryState
                 isLoading={isLoading}
@@ -212,7 +223,13 @@ export function ReviewsView() {
                     <>
                         <div className="grid gap-3">
                             {reviews.length === 0 ? (
-                                <EmptyState message="No reviews match these filters." />
+                                <EmptyState
+                                    message={
+                                        isSearchMode && searchQueryResult.data?.reason === 'index_empty'
+                                            ? 'Semantic search is not ready — review embeddings have not been generated. Run pnpm reviews:embed, then try again. No keyword matches for this query either.'
+                                            : 'No reviews match these filters.'
+                                    }
+                                />
                             ) : (
                                 reviews.map((review) => (
                                     <ReviewCard
